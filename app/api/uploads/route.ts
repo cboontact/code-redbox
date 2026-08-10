@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    requireStaff(request);
+    await requireStaff(request);
     const key = new URL(request.url).searchParams.get("key");
     if (!key) return jsonError("ไม่พบไฟล์", 404);
     const bucket = (env as unknown as { EVIDENCE?: R2Bucket }).EVIDENCE;

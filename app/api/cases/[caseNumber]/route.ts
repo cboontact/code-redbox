@@ -11,7 +11,7 @@ const updateSchema = z.object({
 
 export async function GET(request: Request, context: { params: Promise<{ caseNumber: string }> }) {
   try {
-    requireStaff(request);
+    await requireStaff(request);
     const db = await ensureDatabase();
     const { caseNumber } = await context.params;
     const item = await db.prepare(
@@ -36,7 +36,7 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
 
 export async function PATCH(request: Request, context: { params: Promise<{ caseNumber: string }> }) {
   try {
-    const actor = requireStaff(request);
+    const actor = await requireStaff(request);
     const input = updateSchema.safeParse(await request.json());
     if (!input.success || Object.keys(input.data).length === 0) return jsonError("ไม่มีข้อมูลสำหรับบันทึก");
     const db = await ensureDatabase();

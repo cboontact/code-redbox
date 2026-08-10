@@ -80,7 +80,7 @@ export async function GET(request: Request) {
       return Response.json({ case: item });
     }
 
-    requireStaff(request);
+    await requireStaff(request);
     const status = url.searchParams.get("status");
     const severity = url.searchParams.get("severity");
     const search = url.searchParams.get("search")?.trim();

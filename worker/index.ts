@@ -6,6 +6,9 @@ interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
   EVIDENCE: R2Bucket;
+  ADMIN_USERNAME: string;
+  ADMIN_PASSWORD: string;
+  SESSION_SECRET: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
