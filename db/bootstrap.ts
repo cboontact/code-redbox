@@ -167,6 +167,7 @@ export async function ensureDatabase() {
     (id,username,password_hash,display_name,role,advisor_id,must_change_password,is_active,created_by)
     VALUES ('staff-super-admin','cboonta',?,'ผู้ดูแลระบบสูงสุด','SUPER_ADMIN',NULL,0,1,'system')
     ON CONFLICT(username) DO UPDATE SET
+      password_hash=CASE WHEN staff_users.password_hash LIKE 'pbkdf2$%' THEN excluded.password_hash ELSE staff_users.password_hash END,
       display_name=excluded.display_name,role='SUPER_ADMIN',advisor_id=NULL,
       must_change_password=0,is_active=1,updated_at=CURRENT_TIMESTAMP`)
     .bind(DEFAULT_SUPER_ADMIN_HASH).run();
