@@ -7,10 +7,14 @@ import { jsonError } from "../../../../lib/security";
 const roleSchema = z.enum(["SUPER_ADMIN", "INTAKE", "CASE_OFFICER", "ADVISOR", "DIRECTOR"]);
 const createSchema = z.object({
   username: z.string().trim().min(3).max(80).regex(/^[a-zA-Z0-9._-]+$/),
-  password: z.string().min(8).max(200),
+  password: z.string().min(3).max(200),
   displayName: z.string().trim().min(2).max(120),
   role: roleSchema,
   advisorId: z.string().trim().min(1).nullable().optional(),
+}).superRefine((value, context) => {
+  if (value.role !== "ADVISOR" && value.password.length < 8) {
+    context.addIssue({ code: "custom", path: ["password"], message: "รหัสผ่านเจ้าหน้าที่ต้องมีอย่างน้อย 8 ตัวอักษร" });
+  }
 });
 
 export async function GET(request: Request) {

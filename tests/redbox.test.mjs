@@ -275,17 +275,19 @@ test("protects evidence uploads with expiring opaque tokens and case-level acces
 });
 
 test("forces initial staff passwords to be changed without resetting changed passwords", async () => {
-  const [auth, frame, changePassword, accountScript] = await Promise.all([
+  const [auth, frame, changePassword, accountScript, usersApi] = await Promise.all([
     readFile(new URL("../lib/admin-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/AdminFrame.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/auth/change-password/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../scripts/create-advisor-accounts.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(auth, /mustChangePassword/);
   assert.match(auth, /Password change required/);
   assert.match(frame, /ตั้งรหัสผ่านใหม่ก่อนเริ่มใช้งาน/);
   assert.match(changePassword, /must_change_password=0/);
   assert.doesNotMatch(accountScript, /ON CONFLICT\(username\) DO UPDATE SET password_hash/);
+  assert.match(usersApi, /value\.role !== "ADVISOR"/);
 });
 
 test("allocates case numbers atomically for concurrent Cloudflare requests", async () => {
