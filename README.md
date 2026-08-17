@@ -48,6 +48,8 @@ npm test
 
 ค่าทั้งสองประกาศไว้ใน `.openai/hosting.json` และจะถูกจัดเตรียมเมื่อ Deploy ผ่าน Sites
 
+สำหรับการ Deploy เข้าบัญชี Cloudflare โรงเรียนโดยตรง ใช้ `wrangler.direct.jsonc` ซึ่งผูกเฉพาะ Worker `redbox`, D1 `redbox-db` และ R2 `redbox-evidence`
+
 หน้าเจ้าหน้าที่และหน้าผู้อำนวยการใช้บัญชีแยกกัน และ API ตรวจ Role ซ้ำทุกครั้ง
 
 ก่อน Deploy ต้องกำหนด Secret `SESSION_SECRET` ที่สุ่มและมีความยาวอย่างน้อย 32 ตัวอักษร ห้ามเก็บค่าจริงไว้ใน Git

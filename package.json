@@ -15,7 +15,9 @@
     "db:seed:demo": "node scripts/seed-demo.mjs",
     "db:import:advisors": "node scripts/import-advisors.mjs",
     "db:import:students": "node scripts/import-students.mjs",
-    "db:create:advisor-accounts": "node scripts/create-advisor-accounts.mjs"
+    "db:create:advisor-accounts": "node scripts/create-advisor-accounts.mjs",
+    "cf:deploy": "npm run build && wrangler deploy --config wrangler.direct.jsonc",
+    "cf:migrate": "wrangler d1 migrations apply redbox-db --remote --config wrangler.direct.jsonc"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.3.1",
