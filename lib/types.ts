@@ -1,5 +1,14 @@
 export type Severity = "GENERAL" | "CONCERN" | "SERIOUS" | "CRITICAL";
-export type CaseStatus = "NEW" | "SCREENING" | "IN_PROGRESS" | "DIRECTOR_REVIEW" | "RESOLVED" | "CLOSED";
+export type CaseStatus = "NEW" | "SCREENING" | "ASSIGNED" | "IN_PROGRESS" | "ADMIN_REVIEW" | "DIRECTOR_REVIEW" | "DIRECTOR_ORDERED" | "PENDING_CLOSE" | "RESOLVED" | "CLOSED" | "REOPENED";
+
+export interface AdvisorSummary {
+  id: string;
+  prefix: string;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  order: number;
+}
 
 export interface Student {
   id: string;
@@ -10,8 +19,11 @@ export interface Student {
   level: string;
   classroom: string;
   number: number;
+  advisors: AdvisorSummary[];
+  advisor_names: string[];
   advisor1: string;
   advisor2: string | null;
+  has_tracking_password?: number;
 }
 
 export interface CaseRecord {

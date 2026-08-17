@@ -11,7 +11,11 @@
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/redbox.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:seed:demo": "node scripts/seed-demo.mjs",
+    "db:import:advisors": "node scripts/import-advisors.mjs",
+    "db:import:students": "node scripts/import-students.mjs",
+    "db:create:advisor-accounts": "node scripts/create-advisor-accounts.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.3.1",
@@ -21,6 +25,7 @@
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "react-icons": "^5.7.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

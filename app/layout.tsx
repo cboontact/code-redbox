@@ -1,14 +1,7 @@
 import type { Metadata } from "next";
-import { Noto_Sans_Thai } from "next/font/google";
 import { headers } from "next/headers";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import "./globals.css";
-
-const notoSansThai = Noto_Sans_Thai({
-  variable: "--font-noto-thai",
-  subsets: ["thai", "latin"],
-  display: "swap",
-});
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -28,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="th">
-      <body className={`${notoSansThai.variable} antialiased`}>{children}</body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

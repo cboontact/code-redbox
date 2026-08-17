@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowRightToBracket, faCircleInfo, faLock, faUser } from "@fortawesome/free-solid-svg-icons";
 
-export function AdminLoginForm() {
+export function AdminLoginForm({ role = "ADMIN" }: { role?: "ADMIN" | "DIRECTOR" }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,11 +18,11 @@ export function AdminLoginForm() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, role }),
       });
-      const data = await response.json() as { error?: string };
+      const data = await response.json() as { error?: string; role?: string };
       if (!response.ok) throw new Error(data.error ?? "ไม่สามารถเข้าสู่ระบบได้");
-      window.location.href = "/admin";
+      window.location.href = data.role === "DIRECTOR" ? "/director" : "/admin";
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "ไม่สามารถเข้าสู่ระบบได้");
     } finally {

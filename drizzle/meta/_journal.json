@@ -15,6 +15,34 @@
       "when": 1786349557847,
       "tag": "0001_omniscient_agent_zero",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786355089595,
+      "tag": "0002_spotty_thunderbolt_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786356140340,
+      "tag": "0003_ordinary_zarek",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786359561694,
+      "tag": "0004_wandering_shinobi_shaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786950422928,
+      "tag": "0005_optimal_inertia",
+      "breakpoints": true
     }
   ]
 }

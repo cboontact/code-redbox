@@ -6,8 +6,6 @@ interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
   EVIDENCE: R2Bucket;
-  ADMIN_USERNAME: string;
-  ADMIN_PASSWORD: string;
   SESSION_SECRET: string;
   IMAGES: {
     input(stream: ReadableStream): {
@@ -23,6 +21,18 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+function withSecurityHeaders(response: Response, request: Request) {
+  const secured = new Response(response.body, response);
+  secured.headers.set("x-content-type-options", "nosniff");
+  secured.headers.set("x-frame-options", "SAMEORIGIN");
+  secured.headers.set("referrer-policy", "same-origin");
+  secured.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
+  secured.headers.set("cross-origin-opener-policy", "same-origin");
+  if (new URL(request.url).pathname.startsWith("/api/")) secured.headers.set("cache-control", "private, no-store");
+  if (new URL(request.url).protocol === "https:") secured.headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
+  return secured;
+}
+
 // Image security config. SVG sources with .svg extension auto-skip the
 // optimization endpoint on the client side (served directly, no proxy).
 // To route SVGs through the optimizer (with security headers), set
@@ -35,16 +45,17 @@ const worker = {
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(request, {
+      const response = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
         transformImage: async (body, { width, format, quality }) => {
           const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
           return result.response();
         },
       }, allowedWidths);
+      return withSecurityHeaders(response, request);
     }
 
-    return handler.fetch(request, env, ctx);
+    return withSecurityHeaders(await handler.fetch(request, env, ctx), request);
   },
 };
 

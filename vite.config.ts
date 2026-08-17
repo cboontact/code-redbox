@@ -51,6 +51,10 @@ export default defineConfig(async () => {
       vinext(),
       sites(),
       cloudflare({
+        // The worker inspector is useful for framework debugging, but is not
+        // part of this app. Disabling it also removes the /__debug URL shown
+        // by the local development server.
+        inspectorPort: false,
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: localBindingConfig,
       }),

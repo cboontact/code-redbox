@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `advisor_assignment_advisor_room_unique` ON `advisor_assignments` (`advisor_id`,`level`,`classroom`);

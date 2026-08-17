@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const students = sqliteTable("students", {
   id: text("id").primaryKey(),
   studentCode: text("student_code").notNull().unique(),
+  studentCardNumber: text("student_card_number"),
+  trackingPasswordHash: text("tracking_password_hash"),
   prefix: text("prefix").notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
@@ -26,6 +28,32 @@ export const categories = sqliteTable("case_categories", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
 });
 
+export const advisors = sqliteTable("advisors", {
+  id: text("id").primaryKey(),
+  prefix: text("prefix").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  sourceUsername: text("source_username"),
+  specialRole: text("special_role"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const advisorAssignments = sqliteTable("advisor_assignments", {
+  id: text("id").primaryKey(),
+  advisorId: text("advisor_id").notNull().references(() => advisors.id),
+  level: text("level").notNull(),
+  classroom: text("classroom").notNull(),
+  slot: integer("slot").notNull().default(1),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("advisor_assignment_room_slot_unique").on(table.level, table.classroom, table.slot),
+  uniqueIndex("advisor_assignment_advisor_room_unique").on(table.advisorId, table.level, table.classroom),
+]);
+
 export const cases = sqliteTable("cases", {
   id: text("id").primaryKey(),
   caseNumber: text("case_number").notNull().unique(),
@@ -39,11 +67,19 @@ export const cases = sqliteTable("cases", {
   safetyLevel: text("safety_level").notNull(),
   isAnonymous: integer("is_anonymous", { mode: "boolean" }).notNull().default(false),
   requiresImmediateReview: integer("requires_immediate_review", { mode: "boolean" }).notNull().default(false),
+  trackingPasswordHash: text("tracking_password_hash"),
+  uploadTokenHash: text("upload_token_hash"),
+  uploadTokenExpiresAt: text("upload_token_expires_at"),
   severity: text("severity").notNull().default("GENERAL"),
   status: text("status").notNull().default("NEW"),
   assignedTo: text("assigned_to"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const caseSequences = sqliteTable("case_sequences", {
+  year: text("year").primaryKey(),
+  lastValue: integer("last_value").notNull(),
 });
 
 export const timeline = sqliteTable("case_timeline", {
@@ -61,6 +97,42 @@ export const notes = sqliteTable("case_notes", {
   caseId: text("case_id").notNull().references(() => cases.id),
   note: text("note").notNull(),
   createdBy: text("created_by").notNull(),
+  isEditable: integer("is_editable", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const staffUsers = sqliteTable("staff_users", {
+  id: text("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  displayName: text("display_name").notNull(),
+  role: text("role").notNull(),
+  advisorId: text("advisor_id"),
+  mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const caseHandoffs = sqliteTable("case_handoffs", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id").notNull().references(() => cases.id),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  fromUsername: text("from_username").notNull(),
+  toUsername: text("to_username"),
+  reason: text("reason").notNull(),
+  dueDate: text("due_date"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const directorActions = sqliteTable("director_actions", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id").notNull().references(() => cases.id),
+  directorId: text("director_id").notNull(),
+  action: text("action").notNull(),
+  message: text("message"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
