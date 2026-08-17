@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 
 // Precomputed PBKDF2 hash for the immutable bootstrap credential. Computing it
 // during every Worker cold start can exceed the Cloudflare CPU startup budget.
-const DEFAULT_SUPER_ADMIN_HASH = "pbkdf2$120000$JcofL2ua7/wyV2k8x6yu5Q==$udaUxlJZMTEpg0n83VmLxq43EN++RcveG/EDX/FICnM=";
+const DEFAULT_SUPER_ADMIN_HASH = "hmac-sha256$artye74+Mx6EZR5d8/CnOQ==$GZ+jIKpaaw3qtyyjM9xwBVILdTkCH4k1F0UuFK2ZecQ=";
 
 const statements = [
   `CREATE TABLE IF NOT EXISTS students (
