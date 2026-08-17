@@ -23,11 +23,13 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     const caseRow = await db.prepare(
       `SELECT c.id,c.case_number,c.student_id,c.category_id,c.title,c.description,c.location,
        c.people_involved,c.requested_help,c.safety_level,c.is_anonymous,c.requires_immediate_review,
-       c.severity,c.status,c.assigned_to,c.created_at,c.updated_at,
+       c.severity,c.status,c.assigned_to,assignee.display_name assigned_name,c.created_at,c.updated_at,
        cc.name category_name,s.student_code,s.prefix,s.first_name,s.last_name,
        s.level,s.classroom,s.number,s.advisor1 legacy_advisor1,s.advisor2 legacy_advisor2
        FROM cases c JOIN case_categories cc ON cc.id=c.category_id
-       JOIN students s ON s.id=c.student_id WHERE c.case_number=?`,
+       JOIN students s ON s.id=c.student_id
+       LEFT JOIN staff_users assignee ON assignee.username=c.assigned_to
+       WHERE c.case_number=?`,
     ).bind(caseNumber).first<Record<string, unknown>>();
     if (!caseRow) return jsonError("ไม่พบเคส", 404);
     if (session.role === "CASE_OFFICER" && String(caseRow.assigned_to ?? "") !== session.username) return jsonError("ไม่มีสิทธิ์เปิดเคสนี้", 403);
