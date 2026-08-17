@@ -102,6 +102,17 @@ test("does not ship unfinished menu copy", async () => {
   assert.match(app, /เสนอผู้อำนวยการ/);
 });
 
+test("renders workflow transitions above the case drawer", async () => {
+  const [modal, styles] = await Promise.all([
+    readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(modal, /createPortal/);
+  assert.match(modal, /document\.body/);
+  assert.match(styles, /\.modal-backdrop\s*\{[^}]*position:fixed/);
+  assert.match(styles, /\.modal-backdrop\s*\{[^}]*z-index:1000/);
+});
+
 test("does not seed fake students, advisors, or generic staff into production", async () => {
   const [bootstrap, auth] = await Promise.all([
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
