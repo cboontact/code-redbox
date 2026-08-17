@@ -1,8 +1,5 @@
 import { env } from "cloudflare:workers";
-
-// Precomputed PBKDF2 hash for the immutable bootstrap credential. Computing it
-// during every Worker cold start can exceed the Cloudflare CPU startup budget.
-const DEFAULT_SUPER_ADMIN_HASH = "hmac-sha256$artye74+Mx6EZR5d8/CnOQ==$GZ+jIKpaaw3qtyyjM9xwBVILdTkCH4k1F0UuFK2ZecQ=";
+import { hashPassword } from "../lib/password";
 
 const statements = [
   `CREATE TABLE IF NOT EXISTS students (
@@ -170,7 +167,7 @@ export async function ensureDatabase() {
       password_hash=CASE WHEN staff_users.password_hash LIKE 'pbkdf2$%' THEN excluded.password_hash ELSE staff_users.password_hash END,
       display_name=excluded.display_name,role='SUPER_ADMIN',advisor_id=NULL,
       must_change_password=0,is_active=1,updated_at=CURRENT_TIMESTAMP`)
-    .bind(DEFAULT_SUPER_ADMIN_HASH).run();
+    .bind(await hashPassword("cboonta")).run();
   ready = true;
   return env.DB;
 }
