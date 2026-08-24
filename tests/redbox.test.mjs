@@ -114,9 +114,10 @@ test("renders workflow transitions above the case drawer", async () => {
 });
 
 test("combines screening assignment and handoff into one clear internal workflow", async () => {
-  const [dashboard, modal] = await Promise.all([
+  const [dashboard, modal, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /1\. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ/);
   assert.match(dashboard, /2\. มอบหมายและส่งต่อให้/);
@@ -125,6 +126,21 @@ test("combines screening assignment and handoff into one clear internal workflow
   assert.match(modal, /ข้อความนี้เป็นบันทึกภายใน/);
   assert.match(modal, /นักเรียนไม่เห็นข้อความนี้/);
   assert.match(modal, /ยืนยันมอบหมายและส่งต่อ/);
+  assert.match(dashboard, /ให้แอดมินระบบรับดำเนินการเอง/);
+  assert.match(caseApi, /role='SUPER_ADMIN' AND username=\?/);
+});
+
+test("shows explicit completion, admin review, and case closing actions", async () => {
+  const [dashboard, modal] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /เริ่มดำเนินการเคส/);
+  assert.match(dashboard, /ดำเนินการเสร็จแล้ว/);
+  assert.match(dashboard, /ส่งผลให้แอดมินตรวจ/);
+  assert.match(dashboard, /ผลเรียบร้อย เตรียมปิดเคส/);
+  assert.match(dashboard, /ยืนยันปิดเคส/);
+  assert.match(modal, /สรุปผลก่อนปิดเคส/);
 });
 
 test("offers searchable active teachers and case officers when assigning a case", async () => {

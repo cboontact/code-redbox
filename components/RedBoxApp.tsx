@@ -1412,6 +1412,8 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [currentRole, setCurrentRole] = useState("");
+  const [currentUsername, setCurrentUsername] = useState("");
+  const [currentDisplayName, setCurrentDisplayName] = useState("");
   const [transitionTarget, setTransitionTarget] = useState("");
   const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
   const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
@@ -1473,9 +1475,17 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
     fetch("/api/auth/me")
       .then(
         async (response) =>
-          (await response.json()) as { user?: { role?: string } },
+          (await response.json()) as {
+            user?: { role?: string; username?: string; displayName?: string };
+          },
       )
-      .then((data) => setCurrentRole(data.user?.role ?? ""))
+      .then((data) => {
+        setCurrentRole(data.user?.role ?? "");
+        setCurrentUsername(data.user?.username ?? "");
+        setCurrentDisplayName(
+          data.user?.displayName ?? data.user?.username ?? "ผู้ดูแลระบบ",
+        );
+      })
       .catch(() => undefined);
   }, []);
   async function openCase(caseNumber: string) {
@@ -1934,13 +1944,26 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </small>
                   </div>
                 </div>
-                {selected.case.status === "SCREENING" &&
-                ["SUPER_ADMIN", "INTAKE"].includes(currentRole) ? (
+                {["SCREENING", "ASSIGNED", "IN_PROGRESS", "ADMIN_REVIEW", "PENDING_CLOSE"].includes(
+                  String(selected.case.status),
+                ) &&
+                availableStatusEntries(
+                  String(selected.case.status),
+                  currentRole,
+                ).length > 1 ? (
                   <div className="workflow-next-step">
                     <FontAwesomeIcon icon={faArrowRight} />
                     <span>
                       <small>ขั้นตอนถัดไป</small>
-                      <b>มอบหมายผู้รับผิดชอบ</b>
+                      <b>
+                        {{
+                          SCREENING: "เลือกผู้รับผิดชอบแล้วส่งต่อ",
+                          ASSIGNED: "เริ่มดำเนินการเคส",
+                          IN_PROGRESS: "ส่งผลการดำเนินงานให้แอดมินตรวจ",
+                          ADMIN_REVIEW: "ตรวจผลแล้วเลือกปิดเคสหรือเสนอผู้อำนวยการ",
+                          PENDING_CLOSE: "ยืนยันปิดเคส",
+                        }[String(selected.case.status)]}
+                      </b>
                     </span>
                   </div>
                 ) : (
@@ -2008,17 +2031,34 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 )}
                 {selected.case.status === "SCREENING" &&
                   ["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
-                    <button
-                      type="button"
-                      className="button primary wide workflow-submit"
-                      disabled={saving || !pendingAssignee}
-                      onClick={() => setTransitionTarget("ASSIGNED")}
-                    >
-                      <FontAwesomeIcon icon={faPaperPlane} />
-                      {pendingAssigneeName
-                        ? `2. มอบหมายและส่งต่อให้ ${pendingAssigneeName}`
-                        : "2. เลือกผู้รับผิดชอบก่อนส่งต่อ"}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="button primary wide workflow-submit"
+                        disabled={saving || !pendingAssignee}
+                        onClick={() => setTransitionTarget("ASSIGNED")}
+                      >
+                        <FontAwesomeIcon icon={faPaperPlane} />
+                        {pendingAssigneeName
+                          ? `2. มอบหมายและส่งต่อให้ ${pendingAssigneeName}`
+                          : "2. เลือกผู้รับผิดชอบก่อนส่งต่อ"}
+                      </button>
+                      {currentRole === "SUPER_ADMIN" && currentUsername && (
+                        <button
+                          type="button"
+                          className="button secondary wide workflow-submit admin-self-assign"
+                          disabled={saving}
+                          onClick={() => {
+                            setPendingAssignee(currentUsername);
+                            setPendingAssigneeName(currentDisplayName);
+                            setTransitionTarget("ASSIGNED");
+                          }}
+                        >
+                          <FontAwesomeIcon icon={faUserShield} />
+                          หรือให้แอดมินระบบรับดำเนินการเอง
+                        </button>
+                      )}
+                    </>
                   )}
                 {selected.case.status !== "SCREENING" &&
                   ["SUPER_ADMIN", "INTAKE"].includes(currentRole) &&
@@ -2033,15 +2073,63 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <FontAwesomeIcon icon={faCheck} /> บันทึกผู้รับผิดชอบ
                     </button>
                   )}
-                {["SUPER_ADMIN", "INTAKE"].includes(currentRole) &&
-                  selected.case.status === "ADMIN_REVIEW" && (
+                {selected.case.status === "ASSIGNED" &&
+                  availableStatusEntries("ASSIGNED", currentRole).some(
+                    ([value]) => value === "IN_PROGRESS",
+                  ) && (
                     <button
                       type="button"
-                      className="button primary wide"
+                      className="button primary wide workflow-submit"
                       disabled={saving}
-                      onClick={() => setTransitionTarget("DIRECTOR_REVIEW")}
+                      onClick={() => setTransitionTarget("IN_PROGRESS")}
                     >
-                      <FontAwesomeIcon icon={faPaperPlane} /> เสนอผู้อำนวยการ
+                      <FontAwesomeIcon icon={faArrowRight} /> เริ่มดำเนินการเคส
+                    </button>
+                  )}
+                {selected.case.status === "IN_PROGRESS" &&
+                  availableStatusEntries("IN_PROGRESS", currentRole).some(
+                    ([value]) => value === "ADMIN_REVIEW",
+                  ) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("ADMIN_REVIEW")}
+                    >
+                      <FontAwesomeIcon icon={faCheck} /> ดำเนินการเสร็จแล้ว
+                      ส่งผลให้แอดมินตรวจ
+                    </button>
+                  )}
+                {selected.case.status === "ADMIN_REVIEW" &&
+                  ["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
+                    <div className="workflow-decision-actions">
+                      <button
+                        type="button"
+                        className="button primary"
+                        disabled={saving}
+                        onClick={() => setTransitionTarget("PENDING_CLOSE")}
+                      >
+                        <FontAwesomeIcon icon={faCheck} /> ผลเรียบร้อย เตรียมปิดเคส
+                      </button>
+                      <button
+                        type="button"
+                        className="button secondary"
+                        disabled={saving}
+                        onClick={() => setTransitionTarget("DIRECTOR_REVIEW")}
+                      >
+                        <FontAwesomeIcon icon={faPaperPlane} /> เสนอผู้อำนวยการ
+                      </button>
+                    </div>
+                  )}
+                {selected.case.status === "PENDING_CLOSE" &&
+                  ["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit close-case-button"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("CLOSED")}
+                    >
+                      <FontAwesomeIcon icon={faCheck} /> ยืนยันปิดเคส
                     </button>
                   )}
               </div>
@@ -2372,6 +2460,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
           recipientLabel={
             transitionTarget === "ASSIGNED" ? pendingAssigneeName : undefined
           }
+          closing={transitionTarget === "CLOSED"}
           saving={saving}
           onClose={() => setTransitionTarget("")}
           onConfirm={(handoffReason, dueDate) =>

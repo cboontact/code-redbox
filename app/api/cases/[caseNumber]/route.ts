@@ -83,8 +83,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       if (input.data.status && item.assigned_to !== session.username) return jsonError("เฉพาะครูที่ได้รับมอบหมายเท่านั้นที่เปลี่ยนสถานะเคสได้", 403);
     }
     if (input.data.assignedTo) {
-      const assignee = await db.prepare("SELECT username FROM staff_users WHERE username=? AND role IN ('CASE_OFFICER','ADVISOR') AND is_active=1")
-        .bind(input.data.assignedTo).first();
+      const assignee = await db.prepare(`SELECT username FROM staff_users
+        WHERE username=? AND is_active=1
+        AND (role IN ('CASE_OFFICER','ADVISOR') OR (role='SUPER_ADMIN' AND username=?))`)
+        .bind(input.data.assignedTo, session.username).first();
       if (!assignee) return jsonError("ไม่พบบัญชีผู้รับผิดชอบเคสที่เปิดใช้งาน", 400);
     }
     if (input.data.status === "ASSIGNED" && !(input.data.assignedTo || item.assigned_to)) return jsonError("กรุณามอบหมายผู้รับผิดชอบก่อนส่งต่อ", 400);
