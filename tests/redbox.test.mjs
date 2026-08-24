@@ -159,6 +159,18 @@ test("makes the current status lead to a clear next action instead of a status m
   assert.match(styles, /\.status-jump-button/);
 });
 
+test("orders the staff case queue by pending, active, then completed work", async () => {
+  const [casesApi, dashboard] = await Promise.all([
+    readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(casesApi, /'NEW','SCREENING','ASSIGNED'\) THEN 0/);
+  assert.match(casesApi, /'IN_PROGRESS','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE','REOPENED'\) THEN 1/);
+  assert.match(casesApi, /'RESOLVED','CLOSED'\) THEN 2/);
+  assert.match(casesApi, /c\.requires_immediate_review DESC,c\.created_at DESC/);
+  assert.match(dashboard, /ยังไม่ได้ดำเนินการ → กำลังดำเนินการ → เสร็จสิ้น/);
+});
+
 test("offers searchable active teachers and case officers when assigning a case", async () => {
   const [app, api, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),

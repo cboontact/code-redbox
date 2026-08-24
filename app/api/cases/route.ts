@@ -8,6 +8,13 @@ const SAFE_CASE_COLUMNS = `c.id,c.case_number,c.student_id,c.category_id,c.title
   c.location,c.people_involved,c.requested_help,c.safety_level,c.is_anonymous,
   c.requires_immediate_review,c.severity,c.status,c.assigned_to,c.created_at,c.updated_at`;
 
+const STAFF_CASE_ORDER = `CASE
+  WHEN c.status IN ('NEW','SCREENING','ASSIGNED') THEN 0
+  WHEN c.status IN ('IN_PROGRESS','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE','REOPENED') THEN 1
+  WHEN c.status IN ('RESOLVED','CLOSED') THEN 2
+  ELSE 1 END,
+  c.requires_immediate_review DESC,c.created_at DESC`;
+
 const createSchema = z.object({
   studentId: z.string().min(1),
   categoryId: z.string().min(1),
@@ -131,7 +138,7 @@ export async function GET(request: Request) {
        s.student_code
        FROM cases c JOIN case_categories cc ON cc.id=c.category_id
        JOIN students s ON s.id=c.student_id
-       WHERE ${clauses.join(" AND ")} ORDER BY c.requires_immediate_review DESC,c.created_at DESC LIMIT 100`,
+       WHERE ${clauses.join(" AND ")} ORDER BY ${STAFF_CASE_ORDER} LIMIT 100`,
     ).bind(...values).all();
     return Response.json({ cases: results });
   } catch (error) {

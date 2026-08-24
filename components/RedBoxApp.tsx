@@ -1753,7 +1753,10 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
             <div className="panel-heading">
               <div>
                 <h2>รายการเคสล่าสุด</h2>
-                <p>ค้นหา คัดกรอง และเปิดดูรายละเอียดได้ทันที</p>
+                <p>
+                  เรียงจากยังไม่ได้ดำเนินการ → กำลังดำเนินการ → เสร็จสิ้น
+                  และเรียงรายการล่าสุดก่อนภายในแต่ละกลุ่ม
+                </p>
               </div>
             </div>
             <div className="filter-bar">
