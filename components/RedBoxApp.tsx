@@ -175,6 +175,43 @@ function availableStatusEntries(current: string, role: string) {
   );
 }
 
+function CaseWorkflowProgress({ status }: { status: string }) {
+  const steps = ["รับเรื่อง", "คัดกรอง", "ดำเนินการ", "ตรวจผล", "ปิดเคส"];
+  const stageByStatus: Record<string, number> = {
+    NEW: 0,
+    SCREENING: 1,
+    REOPENED: 1,
+    ASSIGNED: 2,
+    IN_PROGRESS: 2,
+    DIRECTOR_ORDERED: 2,
+    ADMIN_REVIEW: 3,
+    DIRECTOR_REVIEW: 3,
+    PENDING_CLOSE: 3,
+    RESOLVED: 3,
+    CLOSED: 4,
+  };
+  const currentStage = stageByStatus[status] ?? 0;
+  return (
+    <div className="case-workflow-progress" aria-label="ลำดับการดำเนินงานของเคส">
+      {steps.map((label, index) => (
+        <div
+          key={label}
+          className={
+            index < currentStage
+              ? "complete"
+              : index === currentStage
+                ? "current"
+                : "upcoming"
+          }
+        >
+          <span>{index < currentStage ? <FontAwesomeIcon icon={faCheck} /> : index + 1}</span>
+          <small>{label}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
@@ -1862,7 +1899,19 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
             <div className="drawer-body">
               <div className="case-badges">
                 <SeverityBadge value={String(selected.case.severity)} />
-                <StatusBadge value={String(selected.case.status)} />
+                <button
+                  type="button"
+                  className="status-jump-button"
+                  title="ดูขั้นตอนดำเนินงาน"
+                  onClick={() =>
+                    document
+                      .getElementById("case-workflow-actions")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                >
+                  <StatusBadge value={String(selected.case.status)} />
+                  <small>ดูขั้นตอนต่อไป</small>
+                </button>
               </div>
               <h3 className="case-title">
                 <FontAwesomeIcon icon={faMessage} />
@@ -1926,11 +1975,12 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   </div>
                 )}
               </div>
-              <div className="action-card">
+              <div className="action-card" id="case-workflow-actions">
                 <h4 className="section-title">
                   <FontAwesomeIcon icon={faSliders} />
                   จัดการเคส
                 </h4>
+                <CaseWorkflowProgress status={String(selected.case.status)} />
                 <div className="workflow-guidance">
                   <FontAwesomeIcon icon={faShieldHalved} />
                   <div>
@@ -1944,10 +1994,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </small>
                   </div>
                 </div>
-                {["SCREENING", "ASSIGNED", "IN_PROGRESS", "ADMIN_REVIEW", "PENDING_CLOSE"].includes(
-                  String(selected.case.status),
-                ) &&
-                availableStatusEntries(
+                {availableStatusEntries(
                   String(selected.case.status),
                   currentRole,
                 ).length > 1 ? (
@@ -1957,39 +2004,34 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <small>ขั้นตอนถัดไป</small>
                       <b>
                         {{
+                          NEW: "รับเรื่องและเริ่มคัดกรอง",
                           SCREENING: "เลือกผู้รับผิดชอบแล้วส่งต่อ",
                           ASSIGNED: "เริ่มดำเนินการเคส",
                           IN_PROGRESS: "ส่งผลการดำเนินงานให้แอดมินตรวจ",
                           ADMIN_REVIEW: "ตรวจผลแล้วเลือกปิดเคสหรือเสนอผู้อำนวยการ",
+                          DIRECTOR_ORDERED: "รับคำสั่งผู้อำนวยการและดำเนินการต่อ",
                           PENDING_CLOSE: "ยืนยันปิดเคส",
+                          RESOLVED: "ยืนยันปิดเคส",
+                          CLOSED: "เปิดเคสอีกครั้ง",
+                          REOPENED: "เริ่มคัดกรองใหม่",
                         }[String(selected.case.status)]}
                       </b>
                     </span>
                   </div>
                 ) : (
-                  <label>
+                  <div className="workflow-waiting">
+                    <FontAwesomeIcon icon={faClock} />
                     <span>
-                      <FontAwesomeIcon icon={faClock} />
-                      เปลี่ยนไปขั้นตอนถัดไป
+                      <small>ยังไม่มีรายการที่ต้องดำเนินการ</small>
+                      <b>
+                        {selected.case.status === "DIRECTOR_REVIEW"
+                          ? "รอคำสั่งจากผู้อำนวยการ"
+                          : selected.case.status === "CLOSED"
+                            ? "เคสนี้ปิดเรียบร้อยแล้ว"
+                            : "บัญชีนี้ไม่มีสิทธิ์ดำเนินการในขั้นตอนปัจจุบัน"}
+                      </b>
                     </span>
-                    <select
-                      value={selected.case.status}
-                      onChange={(e) => {
-                        if (e.target.value !== selected.case.status)
-                          setTransitionTarget(e.target.value);
-                      }}
-                      disabled={saving || !currentRole}
-                    >
-                      {availableStatusEntries(
-                        String(selected.case.status),
-                        currentRole,
-                      ).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  </div>
                 )}
                 <label>
                   <span>
@@ -2010,7 +2052,8 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     ))}
                   </select>
                 </label>
-                {["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
+                {["SUPER_ADMIN", "INTAKE"].includes(currentRole) &&
+                  !["NEW", "CLOSED"].includes(String(selected.case.status)) && (
                   <label className="assignee-field">
                     <span>
                       <FontAwesomeIcon icon={faUserShield} />
@@ -2073,6 +2116,19 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <FontAwesomeIcon icon={faCheck} /> บันทึกผู้รับผิดชอบ
                     </button>
                   )}
+                {selected.case.status === "NEW" &&
+                  availableStatusEntries("NEW", currentRole).some(
+                    ([value]) => value === "SCREENING",
+                  ) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("SCREENING")}
+                    >
+                      <FontAwesomeIcon icon={faMagnifyingGlass} /> รับเรื่องและเริ่มคัดกรอง
+                    </button>
+                  )}
                 {selected.case.status === "ASSIGNED" &&
                   availableStatusEntries("ASSIGNED", currentRole).some(
                     ([value]) => value === "IN_PROGRESS",
@@ -2098,6 +2154,19 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     >
                       <FontAwesomeIcon icon={faCheck} /> ดำเนินการเสร็จแล้ว
                       ส่งผลให้แอดมินตรวจ
+                    </button>
+                  )}
+                {selected.case.status === "DIRECTOR_ORDERED" &&
+                  availableStatusEntries("DIRECTOR_ORDERED", currentRole).some(
+                    ([value]) => value === "IN_PROGRESS",
+                  ) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("IN_PROGRESS")}
+                    >
+                      <FontAwesomeIcon icon={faArrowRight} /> รับคำสั่งและดำเนินการต่อ
                     </button>
                   )}
                 {selected.case.status === "ADMIN_REVIEW" &&
@@ -2130,6 +2199,45 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       onClick={() => setTransitionTarget("CLOSED")}
                     >
                       <FontAwesomeIcon icon={faCheck} /> ยืนยันปิดเคส
+                    </button>
+                  )}
+                {selected.case.status === "RESOLVED" &&
+                  availableStatusEntries("RESOLVED", currentRole).some(
+                    ([value]) => value === "CLOSED",
+                  ) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit close-case-button"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("CLOSED")}
+                    >
+                      <FontAwesomeIcon icon={faCheck} /> ยืนยันปิดเคส
+                    </button>
+                  )}
+                {selected.case.status === "CLOSED" &&
+                  availableStatusEntries("CLOSED", currentRole).some(
+                    ([value]) => value === "REOPENED",
+                  ) && (
+                    <button
+                      type="button"
+                      className="button secondary wide workflow-submit"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("REOPENED")}
+                    >
+                      <FontAwesomeIcon icon={faRotate} /> เปิดเคสอีกครั้ง
+                    </button>
+                  )}
+                {selected.case.status === "REOPENED" &&
+                  availableStatusEntries("REOPENED", currentRole).some(
+                    ([value]) => value === "SCREENING",
+                  ) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("SCREENING")}
+                    >
+                      <FontAwesomeIcon icon={faMagnifyingGlass} /> เริ่มคัดกรองใหม่
                     </button>
                   )}
               </div>

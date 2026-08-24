@@ -143,6 +143,22 @@ test("shows explicit completion, admin review, and case closing actions", async 
   assert.match(modal, /สรุปผลก่อนปิดเคส/);
 });
 
+test("makes the current status lead to a clear next action instead of a status menu", async () => {
+  const [dashboard, styles] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  for (const step of ["รับเรื่อง", "คัดกรอง", "ดำเนินการ", "ตรวจผล", "ปิดเคส"]) {
+    assert.match(dashboard, new RegExp(step));
+  }
+  assert.match(dashboard, /case-workflow-actions/);
+  assert.match(dashboard, /scrollIntoView/);
+  assert.match(dashboard, /รับเรื่องและเริ่มคัดกรอง/);
+  assert.doesNotMatch(dashboard, /เปลี่ยนไปขั้นตอนถัดไป/);
+  assert.match(styles, /\.case-workflow-progress/);
+  assert.match(styles, /\.status-jump-button/);
+});
+
 test("offers searchable active teachers and case officers when assigning a case", async () => {
   const [app, api, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
