@@ -3,10 +3,10 @@
 import { FormEvent, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowRight, faClock, faPaperPlane, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faArrowRight, faClock, faEyeSlash, faPaperPlane, faUserShield, faXmark } from "@fortawesome/free-solid-svg-icons";
 
-export function WorkflowTransitionModal({ fromLabel, toLabel, saving, onClose, onConfirm }: {
-  fromLabel: string; toLabel: string; saving: boolean; onClose: () => void;
+export function WorkflowTransitionModal({ fromLabel, toLabel, recipientLabel, saving, onClose, onConfirm }: {
+  fromLabel: string; toLabel: string; recipientLabel?: string; saving: boolean; onClose: () => void;
   onConfirm: (reason: string, dueDate: string) => void;
 }) {
   const [reason, setReason] = useState("");
@@ -33,7 +33,13 @@ export function WorkflowTransitionModal({ fromLabel, toLabel, saving, onClose, o
     <section className="workflow-modal" role="dialog" aria-modal="true" aria-labelledby="workflow-modal-title">
       <header><div><span className="eyebrow"><FontAwesomeIcon icon={faPaperPlane} /> ส่งต่อเคส</span><h2 id="workflow-modal-title">ยืนยันขั้นตอนถัดไป</h2></div><button type="button" onClick={onClose} disabled={saving} aria-label="ปิด"><FontAwesomeIcon icon={faXmark} /></button></header>
       <div className="workflow-route"><b>{fromLabel}</b><FontAwesomeIcon icon={faArrowRight} /><b>{toLabel}</b></div>
-      <form onSubmit={submit}><label><span>เหตุผล คำสั่ง หรือผลการดำเนินงาน</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={4} minLength={2} maxLength={1000} autoFocus required placeholder="ระบุรายละเอียดให้ผู้รับช่วงต่อเข้าใจงาน..." /></label><label><span><FontAwesomeIcon icon={faClock} /> กำหนดติดตาม (ถ้ามี)</span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label><footer><button type="button" className="button secondary" onClick={onClose} disabled={saving}>ยกเลิก</button><button className="button primary" disabled={saving || reason.trim().length < 2}>{saving ? "กำลังส่งต่อ..." : "ยืนยันส่งต่อ"}</button></footer></form>
+      <form onSubmit={submit}>
+        {recipientLabel && <div className="workflow-recipient"><FontAwesomeIcon icon={faUserShield} /><span><small>ส่งงานและคำสั่งถึง</small><b>{recipientLabel}</b></span></div>}
+        <div className="workflow-audience-note"><FontAwesomeIcon icon={faEyeSlash} /><span><b>ข้อความนี้เป็นบันทึกภายใน</b><small>ผู้ดูแลระบบและเจ้าหน้าที่หรือครูที่รับช่วงต่อเท่านั้นที่เห็น นักเรียนไม่เห็นข้อความนี้</small></span></div>
+        <label><span>คำสั่งหรือรายละเอียดสำหรับผู้รับช่วงต่อ</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={4} minLength={2} maxLength={1000} autoFocus required placeholder={recipientLabel ? `ระบุสิ่งที่ต้องการให้ ${recipientLabel} ดำเนินการ...` : "ระบุเหตุผล ผลการดำเนินงาน หรือสิ่งที่ต้องทำต่อ..."} /></label>
+        <label><span><FontAwesomeIcon icon={faClock} /> กำหนดติดตาม (ถ้ามี)</span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+        <footer><button type="button" className="button secondary" onClick={onClose} disabled={saving}>ยกเลิก</button><button className="button primary" disabled={saving || reason.trim().length < 2}>{saving ? "กำลังส่งต่อ..." : recipientLabel ? "ยืนยันมอบหมายและส่งต่อ" : "ยืนยันส่งต่อ"}</button></footer>
+      </form>
     </section>
   </div>, document.body);
 }

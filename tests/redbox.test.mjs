@@ -113,6 +113,20 @@ test("renders workflow transitions above the case drawer", async () => {
   assert.match(styles, /\.modal-backdrop\s*\{[^}]*z-index:1000/);
 });
 
+test("combines screening assignment and handoff into one clear internal workflow", async () => {
+  const [dashboard, modal] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /1\. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ/);
+  assert.match(dashboard, /2\. มอบหมายและส่งต่อให้/);
+  assert.match(dashboard, /transitionTarget === "ASSIGNED" && pendingAssignee/);
+  assert.match(dashboard, /assignedTo: pendingAssignee/);
+  assert.match(modal, /ข้อความนี้เป็นบันทึกภายใน/);
+  assert.match(modal, /นักเรียนไม่เห็นข้อความนี้/);
+  assert.match(modal, /ยืนยันมอบหมายและส่งต่อ/);
+});
+
 test("offers searchable active teachers and case officers when assigning a case", async () => {
   const [app, api, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),

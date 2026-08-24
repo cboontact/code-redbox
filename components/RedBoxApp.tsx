@@ -1280,11 +1280,11 @@ function Tracking({ notify }: { notify: (message: string) => void }) {
 function AssigneeCombobox({
   currentUsername,
   disabled,
-  onAssign,
+  onSelect,
 }: {
   currentUsername: string;
   disabled: boolean;
-  onAssign: (username: string) => void;
+  onSelect: (username: string, displayName: string) => void;
 }) {
   type Assignee = {
     username: string;
@@ -1325,6 +1325,7 @@ function AssigneeCombobox({
   function choose(item: Assignee) {
     setQuery(item.display_name);
     setSelectedUsername(item.username);
+    onSelect(item.username, item.display_name);
     setOpen(false);
   }
 
@@ -1353,18 +1354,10 @@ function AssigneeCombobox({
                   item.display_name === value || item.username === value,
               );
               setSelectedUsername(exact?.username ?? "");
+              onSelect(exact?.username ?? "", exact?.display_name ?? "");
             }}
           />
         </div>
-        <button
-          type="button"
-          aria-label="ยืนยันการมอบหมาย"
-          title="ยืนยันการมอบหมาย"
-          onClick={() => onAssign(selectedUsername)}
-          disabled={disabled || !selectedUsername}
-        >
-          <FontAwesomeIcon icon={faCheck} />
-        </button>
       </div>
       {open && !disabled && (
         <div className="assignee-options" id="assignee-options" role="listbox">
@@ -1424,6 +1417,8 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState("");
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState("");
+  const [pendingAssignee, setPendingAssignee] = useState("");
+  const [pendingAssigneeName, setPendingAssigneeName] = useState("");
   async function loadCases() {
     setLoading(true);
     setError("");
@@ -1491,6 +1486,10 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       setNote("");
       setNoteEditorOpen(false);
       setEditingNoteId(null);
+      setPendingAssignee(String(data.case.assigned_to ?? ""));
+      setPendingAssigneeName(
+        String(data.case.assigned_name ?? data.case.assigned_to ?? ""),
+      );
       setSelected(data);
     } catch {
       notify("ไม่สามารถโหลดรายละเอียดเคสได้");
@@ -1922,29 +1921,53 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   <FontAwesomeIcon icon={faSliders} />
                   จัดการเคส
                 </h4>
-                <label>
-                  <span>
-                    <FontAwesomeIcon icon={faClock} />
-                    สถานะ
-                  </span>
-                  <select
-                    value={selected.case.status}
-                    onChange={(e) => {
-                      if (e.target.value !== selected.case.status)
-                        setTransitionTarget(e.target.value);
-                    }}
-                    disabled={saving || !currentRole}
-                  >
-                    {availableStatusEntries(
-                      String(selected.case.status),
-                      currentRole,
-                    ).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="workflow-guidance">
+                  <FontAwesomeIcon icon={faShieldHalved} />
+                  <div>
+                    <b>
+                      ขั้นตอนปัจจุบัน: {statusLabels[String(selected.case.status)]}
+                    </b>
+                    <small>
+                      คำสั่งและเหตุผลที่กรอกตอนส่งต่อเป็นบันทึกภายใน
+                      เฉพาะเจ้าหน้าที่และครูที่เกี่ยวข้องเท่านั้นที่เห็น
+                      นักเรียนจะไม่เห็นข้อความนี้
+                    </small>
+                  </div>
+                </div>
+                {selected.case.status === "SCREENING" &&
+                ["SUPER_ADMIN", "INTAKE"].includes(currentRole) ? (
+                  <div className="workflow-next-step">
+                    <FontAwesomeIcon icon={faArrowRight} />
+                    <span>
+                      <small>ขั้นตอนถัดไป</small>
+                      <b>มอบหมายผู้รับผิดชอบ</b>
+                    </span>
+                  </div>
+                ) : (
+                  <label>
+                    <span>
+                      <FontAwesomeIcon icon={faClock} />
+                      เปลี่ยนไปขั้นตอนถัดไป
+                    </span>
+                    <select
+                      value={selected.case.status}
+                      onChange={(e) => {
+                        if (e.target.value !== selected.case.status)
+                          setTransitionTarget(e.target.value);
+                      }}
+                      disabled={saving || !currentRole}
+                    >
+                      {availableStatusEntries(
+                        String(selected.case.status),
+                        currentRole,
+                      ).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label>
                   <span>
                     <FontAwesomeIcon icon={faTriangleExclamation} />
@@ -1964,21 +1987,52 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     ))}
                   </select>
                 </label>
-                <label className="assignee-field">
-                  <span>
-                    <FontAwesomeIcon icon={faUserShield} />
-                    มอบหมายให้
-                  </span>
-                  <AssigneeCombobox
-                    key={String(selected.case.assigned_to ?? "unassigned")}
-                    currentUsername={String(selected.case.assigned_to ?? "")}
-                    disabled={
-                      saving ||
-                      !["SUPER_ADMIN", "INTAKE"].includes(currentRole)
-                    }
-                    onAssign={(username) => updateCase({ assignedTo: username })}
-                  />
-                </label>
+                {["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
+                  <label className="assignee-field">
+                    <span>
+                      <FontAwesomeIcon icon={faUserShield} />
+                      {selected.case.status === "SCREENING"
+                        ? "1. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ"
+                        : "ผู้รับผิดชอบเคส"}
+                    </span>
+                    <AssigneeCombobox
+                      key={String(selected.case.assigned_to ?? "unassigned")}
+                      currentUsername={String(selected.case.assigned_to ?? "")}
+                      disabled={saving}
+                      onSelect={(username, displayName) => {
+                        setPendingAssignee(username);
+                        setPendingAssigneeName(displayName);
+                      }}
+                    />
+                  </label>
+                )}
+                {selected.case.status === "SCREENING" &&
+                  ["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit"
+                      disabled={saving || !pendingAssignee}
+                      onClick={() => setTransitionTarget("ASSIGNED")}
+                    >
+                      <FontAwesomeIcon icon={faPaperPlane} />
+                      {pendingAssigneeName
+                        ? `2. มอบหมายและส่งต่อให้ ${pendingAssigneeName}`
+                        : "2. เลือกผู้รับผิดชอบก่อนส่งต่อ"}
+                    </button>
+                  )}
+                {selected.case.status !== "SCREENING" &&
+                  ["SUPER_ADMIN", "INTAKE"].includes(currentRole) &&
+                  pendingAssignee &&
+                  pendingAssignee !== String(selected.case.assigned_to ?? "") && (
+                    <button
+                      type="button"
+                      className="button secondary wide workflow-submit"
+                      disabled={saving}
+                      onClick={() => updateCase({ assignedTo: pendingAssignee })}
+                    >
+                      <FontAwesomeIcon icon={faCheck} /> บันทึกผู้รับผิดชอบ
+                    </button>
+                  )}
                 {["SUPER_ADMIN", "INTAKE"].includes(currentRole) &&
                   selected.case.status === "ADMIN_REVIEW" && (
                     <button
@@ -2315,12 +2369,18 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
             String(selected.case.status)
           }
           toLabel={statusLabels[transitionTarget] ?? transitionTarget}
+          recipientLabel={
+            transitionTarget === "ASSIGNED" ? pendingAssigneeName : undefined
+          }
           saving={saving}
           onClose={() => setTransitionTarget("")}
           onConfirm={(handoffReason, dueDate) =>
             updateCase({
               status: transitionTarget,
               handoffReason,
+              ...(transitionTarget === "ASSIGNED" && pendingAssignee
+                ? { assignedTo: pendingAssignee }
+                : {}),
               ...(dueDate ? { dueDate } : {}),
             })
           }
