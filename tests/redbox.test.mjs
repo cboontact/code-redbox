@@ -249,9 +249,10 @@ test("allows staff to edit an existing internal note and collapses the editor af
 });
 
 test("supports role-based staff accounts and ordered case handoffs", async () => {
-  const [auth, usersApi, caseApi, usersUi, frame, bootstrap] = await Promise.all([
+  const [auth, usersApi, updateUserApi, caseApi, usersUi, frame, bootstrap] = await Promise.all([
     readFile(new URL("../lib/admin-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/users/[id]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/AdminUsers.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/AdminFrame.tsx", import.meta.url), "utf8"),
@@ -266,6 +267,11 @@ test("supports role-based staff accounts and ordered case handoffs", async () =>
   assert.match(caseApi, /case_handoffs/);
   assert.match(caseApi, /handoffReason/);
   assert.match(usersUi, /จัดการผู้ใช้งาน/);
+  assert.match(usersUi, /กำหนดระดับสิทธิ์/);
+  assert.match(usersUi, /กำลังเปลี่ยนระดับสิทธิ์/);
+  assert.match(usersUi, /สิทธิ์ระดับสูงสุด/);
+  assert.match(updateUserApi, /await requireAdmin\(request\)/);
+  assert.match(updateUserApi, /ระบบต้องมีแอดมินระบบอย่างน้อย 1 บัญชี/);
   assert.match(frame, /superAdminOnly/);
   assert.match(bootstrap, /advisor_id/);
 });
