@@ -1990,37 +1990,6 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <FontAwesomeIcon icon={faPaperPlane} /> เสนอผู้อำนวยการ
                     </button>
                   )}
-                {currentRole === "SUPER_ADMIN" && (
-                  <div className="tracking-admin-card">
-                    <div>
-                      <FontAwesomeIcon icon={faShieldHalved} />
-                      <span>
-                        <b>รหัสติดตามนักเรียน</b>
-                        <small>
-                          รหัสเดิมไม่สามารถเปิดดูได้ หากลืมให้ตั้งรหัสใหม่
-                        </small>
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="button secondary compact"
-                      onClick={() => {
-                        setResetPassword("");
-                        setResetPasswordConfirm("");
-                        setResetPasswordOpen(true);
-                      }}
-                    >
-                      รีเซ็ตรหัสติดตาม
-                    </button>
-                    <button
-                      type="button"
-                      className="button danger-button compact"
-                      onClick={() => setDeleteCaseOpen(true)}
-                    >
-                      <FontAwesomeIcon icon={faTrashCan} /> ลบเคส
-                    </button>
-                  </div>
-                )}
               </div>
               <div className="note-card internal-note-card">
                 <div className="note-card-heading">
@@ -2141,6 +2110,49 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   </div>
                 ))}
               </div>
+              {currentRole === "SUPER_ADMIN" && (
+                <section className="admin-tools-card">
+                  <header>
+                    <span>
+                      <FontAwesomeIcon icon={faShieldHalved} />
+                    </span>
+                    <div>
+                      <h4>เครื่องมือผู้ดูแลระบบ</h4>
+                      <p>คำสั่งพิเศษสำหรับดูแลเคส ไม่เกี่ยวกับขั้นตอนดำเนินงาน</p>
+                    </div>
+                  </header>
+                  <div className="admin-tool-row">
+                    <div>
+                      <b>รีเซ็ตรหัสติดตาม</b>
+                      <small>ใช้เมื่อนักเรียนลืมรหัสติดตาม 6 หลัก</small>
+                    </div>
+                    <button
+                      type="button"
+                      className="button secondary compact"
+                      onClick={() => {
+                        setResetPassword("");
+                        setResetPasswordConfirm("");
+                        setResetPasswordOpen(true);
+                      }}
+                    >
+                      รีเซ็ตรหัส
+                    </button>
+                  </div>
+                  <div className="admin-tool-row danger-zone">
+                    <div>
+                      <b>ลบเคสออกจากระบบ</b>
+                      <small>ลบข้อมูลและไฟล์หลักฐานถาวร ไม่สามารถย้อนกลับได้</small>
+                    </div>
+                    <button
+                      type="button"
+                      className="button danger-button compact"
+                      onClick={() => setDeleteCaseOpen(true)}
+                    >
+                      <FontAwesomeIcon icon={faTrashCan} /> ลบเคส
+                    </button>
+                  </div>
+                </section>
+              )}
             </div>
           </aside>
         </div>

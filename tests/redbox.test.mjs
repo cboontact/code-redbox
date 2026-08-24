@@ -134,6 +134,9 @@ test("allows only the highest-level admin to permanently delete a case", async (
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(app, /ยืนยันการลบเคส/);
+  assert.match(app, /เครื่องมือผู้ดูแลระบบ/);
+  assert.ok(app.indexOf("เครื่องมือผู้ดูแลระบบ") > app.indexOf('className="timeline-card"'));
+  assert.doesNotMatch(app, /tracking-admin-card/);
   assert.match(app, /currentRole === "SUPER_ADMIN"/);
   assert.match(caseApi, /export async function DELETE/);
   assert.match(caseApi, /session\.role !== "SUPER_ADMIN"/);
