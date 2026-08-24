@@ -113,16 +113,19 @@ test("renders workflow transitions above the case drawer", async () => {
   assert.match(styles, /\.modal-backdrop\s*\{[^}]*z-index:1000/);
 });
 
-test("offers searchable active case officers when assigning a case", async () => {
-  const [app, api] = await Promise.all([
+test("offers searchable active teachers and case officers when assigning a case", async () => {
+  const [app, api, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/assignees/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(app, /AssigneeCombobox/);
   assert.match(app, /พิมพ์ชื่อครูหรือเจ้าหน้าที่/);
   assert.match(app, /role="combobox"/);
-  assert.match(api, /role='CASE_OFFICER'/);
+  assert.match(api, /'CASE_OFFICER','ADVISOR'/);
   assert.match(api, /is_active=1/);
+  assert.match(caseApi, /role IN \('CASE_OFFICER','ADVISOR'\)/);
+  assert.match(caseApi, /ADVISOR: \["ASSIGNED>IN_PROGRESS"/);
 });
 
 test("does not seed fake students, advisors, or generic staff into production", async () => {

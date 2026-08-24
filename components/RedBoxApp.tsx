@@ -158,6 +158,11 @@ function availableStatusEntries(current: string, role: string) {
       "IN_PROGRESS>ADMIN_REVIEW",
       "DIRECTOR_ORDERED>IN_PROGRESS",
     ],
+    ADVISOR: [
+      "ASSIGNED>IN_PROGRESS",
+      "IN_PROGRESS>ADMIN_REVIEW",
+      "DIRECTOR_ORDERED>IN_PROGRESS",
+    ],
   };
   const next = (edges[current] ?? []).filter(
     (status) =>
@@ -1280,9 +1285,13 @@ function AssigneeCombobox({
   disabled: boolean;
   onAssign: (username: string) => void;
 }) {
-  const [assignees, setAssignees] = useState<
-    Array<{ username: string; display_name: string }>
-  >([]);
+  type Assignee = {
+    username: string;
+    display_name: string;
+    role: "CASE_OFFICER" | "ADVISOR";
+  };
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState(currentUsername);
   const [selectedUsername, setSelectedUsername] = useState(currentUsername);
   const [open, setOpen] = useState(false);
@@ -1291,16 +1300,17 @@ function AssigneeCombobox({
     if (disabled) return;
     fetch("/api/cases/assignees")
       .then(async (response) => {
-        const data = await readJson<{
-          assignees?: Array<{ username: string; display_name: string }>;
-        }>(response);
-        if (!response.ok) return;
+        const data = await readJson<{ assignees?: Assignee[] }>(response);
+        if (!response.ok) throw new Error("โหลดรายชื่อไม่สำเร็จ");
         const items = data.assignees ?? [];
         setAssignees(items);
+        setLoadError("");
         const current = items.find((item) => item.username === currentUsername);
         if (current) setQuery(current.display_name);
       })
-      .catch(() => undefined);
+      .catch(() =>
+        setLoadError("โหลดรายชื่อครูไม่สำเร็จ กรุณาลองเปิดเคสใหม่อีกครั้ง"),
+      );
   }, [currentUsername, disabled]);
 
   const normalizedQuery = query.trim().toLocaleLowerCase("th-TH");
@@ -1311,7 +1321,7 @@ function AssigneeCombobox({
         .includes(normalizedQuery),
     )
     .slice(0, 8);
-  function choose(item: { username: string; display_name: string }) {
+  function choose(item: Assignee) {
     setQuery(item.display_name);
     setSelectedUsername(item.username);
     setOpen(false);
@@ -1369,7 +1379,12 @@ function AssigneeCombobox({
               >
                 <span>
                   <b>{item.display_name}</b>
-                  <small>@{item.username}</small>
+                  <small>
+                    {item.role === "ADVISOR"
+                      ? "ครูที่ปรึกษา"
+                      : "ผู้รับผิดชอบเคส"}{" "}
+                    · @{item.username}
+                  </small>
                 </span>
                 {item.username === selectedUsername && (
                   <FontAwesomeIcon icon={faCheck} />
@@ -1381,6 +1396,7 @@ function AssigneeCombobox({
           )}
         </div>
       )}
+      {loadError && <small className="assignee-error">{loadError}</small>}
     </div>
   );
 }

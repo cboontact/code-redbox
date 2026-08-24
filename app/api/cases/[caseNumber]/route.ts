@@ -75,13 +75,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     if (session.role === "CASE_OFFICER" && item.assigned_to !== session.username) return jsonError("ไม่มีสิทธิ์แก้ไขเคสนี้", 403);
     if (session.role === "CASE_OFFICER" && (input.data.assignedTo !== undefined || input.data.severity !== undefined)) return jsonError("ผู้รับผิดชอบไม่มีสิทธิ์เปลี่ยนการมอบหมายหรือระดับความสำคัญ", 403);
     if (session.role === "ADVISOR") {
-      if (!session.advisorId || input.data.status || input.data.assignedTo !== undefined || input.data.severity) return jsonError("ครูที่ปรึกษาเพิ่มได้เฉพาะบันทึกในเคส", 403);
+      if (!session.advisorId || input.data.assignedTo !== undefined || input.data.severity) return jsonError("ครูที่ปรึกษาไม่มีสิทธิ์เปลี่ยนผู้รับผิดชอบหรือระดับความสำคัญ", 403);
       const roomAccess = await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=? LIMIT 1")
         .bind(session.advisorId, item.level, item.classroom).first();
       if (!roomAccess) return jsonError("ไม่มีสิทธิ์แก้ไขเคสของห้องนี้", 403);
+      if (input.data.status && item.assigned_to !== session.username) return jsonError("เฉพาะครูที่ได้รับมอบหมายเท่านั้นที่เปลี่ยนสถานะเคสได้", 403);
     }
     if (input.data.assignedTo) {
-      const assignee = await db.prepare("SELECT username FROM staff_users WHERE username=? AND role='CASE_OFFICER' AND is_active=1")
+      const assignee = await db.prepare("SELECT username FROM staff_users WHERE username=? AND role IN ('CASE_OFFICER','ADVISOR') AND is_active=1")
         .bind(input.data.assignedTo).first();
       if (!assignee) return jsonError("ไม่พบบัญชีผู้รับผิดชอบเคสที่เปิดใช้งาน", 400);
     }
@@ -97,6 +98,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       const roleTransitions: Record<string, string[]> = {
         INTAKE: ["NEW>SCREENING", "SCREENING>ASSIGNED", "ADMIN_REVIEW>DIRECTOR_REVIEW", "ADMIN_REVIEW>PENDING_CLOSE", "PENDING_CLOSE>CLOSED", "RESOLVED>CLOSED", "REOPENED>SCREENING"],
         CASE_OFFICER: ["ASSIGNED>IN_PROGRESS", "IN_PROGRESS>ADMIN_REVIEW", "DIRECTOR_ORDERED>IN_PROGRESS"],
+        ADVISOR: ["ASSIGNED>IN_PROGRESS", "IN_PROGRESS>ADMIN_REVIEW", "DIRECTOR_ORDERED>IN_PROGRESS"],
       };
       const edge = `${item.status}>${input.data.status}`;
       const validStep = transitions[item.status]?.includes(input.data.status);
