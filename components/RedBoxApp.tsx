@@ -37,6 +37,7 @@ import {
   faSchool,
   faShieldHalved,
   faSliders,
+  faTrashCan,
   faTriangleExclamation,
   faUserGraduate,
   faUserShield,
@@ -1420,6 +1421,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [currentRole, setCurrentRole] = useState("");
   const [transitionTarget, setTransitionTarget] = useState("");
   const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState("");
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState("");
   async function loadCases() {
@@ -1512,6 +1514,25 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       await openCase(selected.case.case_number);
     } catch (e) {
       notify(e instanceof Error ? e.message : "ไม่สามารถบันทึกข้อมูลได้");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function deleteCase() {
+    if (!selected || currentRole !== "SUPER_ADMIN") return;
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/cases/${selected.case.case_number}`, {
+        method: "DELETE",
+      });
+      const data = await readJson<{ error?: string }>(response);
+      if (!response.ok) throw new Error(data.error);
+      setDeleteCaseOpen(false);
+      setSelected(null);
+      notify("ลบเคสเรียบร้อยแล้ว");
+      await loadCases();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "ไม่สามารถลบเคสได้");
     } finally {
       setSaving(false);
     }
@@ -1991,6 +2012,13 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     >
                       รีเซ็ตรหัสติดตาม
                     </button>
+                    <button
+                      type="button"
+                      className="button danger-button compact"
+                      onClick={() => setDeleteCaseOpen(true)}
+                    >
+                      <FontAwesomeIcon icon={faTrashCan} /> ลบเคส
+                    </button>
                   </div>
                 )}
               </div>
@@ -2211,6 +2239,55 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   บันทึกรหัสใหม่
                 </button>
               </footer>
+            </div>
+          </section>
+        </div>
+      )}
+      {selected && deleteCaseOpen && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !saving)
+              setDeleteCaseOpen(false);
+          }}
+        >
+          <section
+            className="student-confirm-modal case-delete-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="case-delete-title"
+          >
+            <span className="danger">
+              <FontAwesomeIcon icon={faTrashCan} />
+            </span>
+            <h2 id="case-delete-title">ยืนยันการลบเคส</h2>
+            <p>
+              การลบจะนำรายละเอียด บันทึก Timeline และไฟล์หลักฐานของเคสนี้ออกถาวร
+              ไม่สามารถย้อนกลับได้
+            </p>
+            <div className="student-confirm-person">
+              <small>เคสที่จะลบ</small>
+              <b>{selected.case.case_number}</b>
+              <span>{selected.case.title}</span>
+            </div>
+            <div className="student-confirm-actions">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setDeleteCaseOpen(false)}
+                disabled={saving}
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                className="button danger-button"
+                onClick={deleteCase}
+                disabled={saving}
+              >
+                <FontAwesomeIcon icon={faTrashCan} />{" "}
+                {saving ? "กำลังลบ..." : "ลบเคสถาวร"}
+              </button>
             </div>
           </section>
         </div>

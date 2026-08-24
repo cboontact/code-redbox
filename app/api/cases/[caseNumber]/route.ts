@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { env } from "cloudflare:workers";
 import { createId, ensureDatabase } from "../../../../db/bootstrap";
 import { jsonError, requireCaseSession } from "../../../../lib/security";
 import { hashPassword } from "../../../../lib/password";
@@ -162,5 +163,35 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
   } catch (error) {
     if (error instanceof Response) return error;
     return jsonError("ไม่สามารถบันทึกข้อมูลได้ กรุณาลองอีกครั้ง", 500);
+  }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ caseNumber: string }> }) {
+  try {
+    const session = await requireCaseSession(request);
+    if (session.role !== "SUPER_ADMIN") return jsonError("เฉพาะผู้ดูแลระบบระดับสูงสุดเท่านั้นที่ลบเคสได้", 403);
+    const db = await ensureDatabase();
+    const { caseNumber } = await context.params;
+    const item = await db.prepare("SELECT id,case_number,title FROM cases WHERE case_number=?")
+      .bind(caseNumber).first<{ id: string; case_number: string; title: string }>();
+    if (!item) return jsonError("ไม่พบเคส", 404);
+    const attachments = await db.prepare("SELECT storage_key FROM case_attachments WHERE case_id=?")
+      .bind(item.id).all<{ storage_key: string }>();
+    await db.batch([
+      db.prepare("DELETE FROM director_actions WHERE case_id=?").bind(item.id),
+      db.prepare("DELETE FROM case_handoffs WHERE case_id=?").bind(item.id),
+      db.prepare("DELETE FROM case_attachments WHERE case_id=?").bind(item.id),
+      db.prepare("DELETE FROM case_notes WHERE case_id=?").bind(item.id),
+      db.prepare("DELETE FROM case_timeline WHERE case_id=?").bind(item.id),
+      db.prepare("DELETE FROM cases WHERE id=?").bind(item.id),
+      db.prepare("INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)")
+        .bind(createId("audit"), "DELETE_CASE", "case", item.id, session.username, JSON.stringify({ caseNumber: item.case_number, title: item.title })),
+    ]);
+    const keys = attachments.results.map((attachment) => attachment.storage_key);
+    if (keys.length) await env.EVIDENCE.delete(keys).catch(() => undefined);
+    return Response.json({ success: true });
+  } catch (error) {
+    if (error instanceof Response) return error;
+    return jsonError("ไม่สามารถลบเคสได้ กรุณาลองอีกครั้ง", 500);
   }
 }

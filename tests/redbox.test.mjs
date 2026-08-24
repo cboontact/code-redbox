@@ -128,6 +128,22 @@ test("offers searchable active teachers and case officers when assigning a case"
   assert.match(caseApi, /ADVISOR: \["ASSIGNED>IN_PROGRESS"/);
 });
 
+test("allows only the highest-level admin to permanently delete a case", async () => {
+  const [app, caseApi] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(app, /ยืนยันการลบเคส/);
+  assert.match(app, /currentRole === "SUPER_ADMIN"/);
+  assert.match(caseApi, /export async function DELETE/);
+  assert.match(caseApi, /session\.role !== "SUPER_ADMIN"/);
+  for (const table of ["director_actions", "case_handoffs", "case_attachments", "case_notes", "case_timeline", "cases"]) {
+    assert.match(caseApi, new RegExp(`DELETE FROM ${table}`));
+  }
+  assert.match(caseApi, /env\.EVIDENCE\.delete/);
+  assert.match(caseApi, /"DELETE_CASE"/);
+});
+
 test("does not seed fake students, advisors, or generic staff into production", async () => {
   const [bootstrap, auth] = await Promise.all([
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
