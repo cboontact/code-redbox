@@ -2217,6 +2217,23 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <FontAwesomeIcon icon={faCheck} /> ยืนยันปิดเคส
                     </button>
                   )}
+                {currentRole === "SUPER_ADMIN" &&
+                  !["PENDING_CLOSE", "RESOLVED", "CLOSED"].includes(selected.case.status) && (
+                    <div className="direct-close-action">
+                      <span>
+                        <b>ปิดเคสโดยแอดมิน</b>
+                        <small>ข้ามขั้นตอนที่เหลือ โดยต้องระบุสรุปเหตุผลก่อนปิด</small>
+                      </span>
+                      <button
+                        type="button"
+                        className="button secondary direct-close-button"
+                        disabled={saving}
+                        onClick={() => setTransitionTarget("CLOSED")}
+                      >
+                        <FontAwesomeIcon icon={faCheckCircle} /> ปิดเคสทันที
+                      </button>
+                    </div>
+                  )}
                 {selected.case.status === "CLOSED" &&
                   availableStatusEntries("CLOSED", currentRole).some(
                     ([value]) => value === "REOPENED",

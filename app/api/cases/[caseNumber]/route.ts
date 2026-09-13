@@ -105,7 +105,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       };
       const edge = `${item.status}>${input.data.status}`;
       const validStep = transitions[item.status]?.includes(input.data.status);
-      const permitted = session.role === "SUPER_ADMIN" ? validStep : validStep && roleTransitions[session.role]?.includes(edge);
+      const directSuperAdminClose =
+        session.role === "SUPER_ADMIN" &&
+        input.data.status === "CLOSED" &&
+        item.status !== "CLOSED";
+      const permitted = directSuperAdminClose ||
+        (session.role === "SUPER_ADMIN" ? validStep : validStep && roleTransitions[session.role]?.includes(edge));
       if (!permitted) return jsonError("ไม่มีสิทธิ์ส่งเคสข้ามขั้นตอนนี้", 403);
     }
     if (input.data.noteId && input.data.status && input.data.status !== item.status) {

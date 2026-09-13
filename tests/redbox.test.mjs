@@ -337,6 +337,21 @@ test("supports role-based staff accounts and ordered case handoffs", async () =>
   assert.match(bootstrap, /advisor_id/);
 });
 
+test("allows only the highest-level admin to close an open case directly with a recorded reason", async () => {
+  const [dashboard, caseApi, transitionModal] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /currentRole === "SUPER_ADMIN"/);
+  assert.match(dashboard, /ปิดเคสทันที/);
+  assert.match(dashboard, /setTransitionTarget\("CLOSED"\)/);
+  assert.match(caseApi, /const directSuperAdminClose/);
+  assert.match(caseApi, /session\.role === "SUPER_ADMIN"/);
+  assert.match(caseApi, /if \(!input\.data\.handoffReason\)/);
+  assert.match(transitionModal, /สรุปผลก่อนปิดเคส/);
+});
+
 test("uses a new private hashed tracking password for every submitted case", async () => {
   const [dashboard, casesApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
