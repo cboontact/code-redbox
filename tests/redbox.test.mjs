@@ -337,6 +337,19 @@ test("supports role-based staff accounts and ordered case handoffs", async () =>
   assert.match(bootstrap, /advisor_id/);
 });
 
+test("shows directly assigned cases to advisor accounts even outside their advisory rooms", async () => {
+  const [casesApi, caseApi] = await Promise.all([
+    readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(casesApi, /c\.assigned_to=\? OR EXISTS/);
+  assert.match(casesApi, /values\.push\(session\.username, session\.advisorId \?\? ""\)/);
+  assert.match(caseApi, /const directlyAssigned = String\(caseRow\.assigned_to \?\? ""\) === session\.username/);
+  assert.match(caseApi, /if \(!directlyAssigned && !roomAccess\) return jsonError\("ไม่มีสิทธิ์เปิดเคสนี้"/);
+  assert.match(caseApi, /const directlyAssigned = item\.assigned_to === session\.username/);
+  assert.match(caseApi, /if \(input\.data\.status && !directlyAssigned\)/);
+});
+
 test("allows only the highest-level admin to close an open case directly with a recorded reason", async () => {
   const [dashboard, caseApi, transitionModal] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),

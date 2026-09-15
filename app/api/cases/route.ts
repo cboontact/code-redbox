@@ -124,9 +124,11 @@ export async function GET(request: Request) {
     const values: string[] = [];
     if (session.role === "CASE_OFFICER") { clauses.push("c.assigned_to=?"); values.push(session.username); }
     if (session.role === "ADVISOR") {
-      if (!session.advisorId) return Response.json({ cases: [] });
-      clauses.push("EXISTS (SELECT 1 FROM advisor_assignments aa WHERE aa.advisor_id=? AND aa.level=s.level AND aa.classroom=s.classroom)");
-      values.push(session.advisorId);
+      clauses.push(`(c.assigned_to=? OR EXISTS (
+        SELECT 1 FROM advisor_assignments aa
+        WHERE aa.advisor_id=? AND aa.level=s.level AND aa.classroom=s.classroom
+      ))`);
+      values.push(session.username, session.advisorId ?? "");
     }
     if (status) { clauses.push("c.status=?"); values.push(status); }
     if (severity) { clauses.push("c.severity=?"); values.push(severity); }

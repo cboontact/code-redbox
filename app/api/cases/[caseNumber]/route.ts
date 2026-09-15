@@ -35,10 +35,12 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     if (!caseRow) return jsonError("ไม่พบเคส", 404);
     if (session.role === "CASE_OFFICER" && String(caseRow.assigned_to ?? "") !== session.username) return jsonError("ไม่มีสิทธิ์เปิดเคสนี้", 403);
     if (session.role === "ADVISOR") {
-      if (!session.advisorId) return jsonError("บัญชียังไม่ได้เชื่อมกับครูที่ปรึกษา", 403);
-      const roomAccess = await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=? LIMIT 1")
-        .bind(session.advisorId, String(caseRow.level), String(caseRow.classroom)).first();
-      if (!roomAccess) return jsonError("ไม่มีสิทธิ์เปิดเคสของห้องนี้", 403);
+      const directlyAssigned = String(caseRow.assigned_to ?? "") === session.username;
+      const roomAccess = session.advisorId
+        ? await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=? LIMIT 1")
+          .bind(session.advisorId, String(caseRow.level), String(caseRow.classroom)).first()
+        : null;
+      if (!directlyAssigned && !roomAccess) return jsonError("ไม่มีสิทธิ์เปิดเคสนี้", 403);
     }
     const item = attachAdvisorData(
       caseRow,
@@ -76,11 +78,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     if (session.role === "CASE_OFFICER" && item.assigned_to !== session.username) return jsonError("ไม่มีสิทธิ์แก้ไขเคสนี้", 403);
     if (session.role === "CASE_OFFICER" && (input.data.assignedTo !== undefined || input.data.severity !== undefined)) return jsonError("ผู้รับผิดชอบไม่มีสิทธิ์เปลี่ยนการมอบหมายหรือระดับความสำคัญ", 403);
     if (session.role === "ADVISOR") {
-      if (!session.advisorId || input.data.assignedTo !== undefined || input.data.severity) return jsonError("ครูที่ปรึกษาไม่มีสิทธิ์เปลี่ยนผู้รับผิดชอบหรือระดับความสำคัญ", 403);
-      const roomAccess = await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=? LIMIT 1")
-        .bind(session.advisorId, item.level, item.classroom).first();
-      if (!roomAccess) return jsonError("ไม่มีสิทธิ์แก้ไขเคสของห้องนี้", 403);
-      if (input.data.status && item.assigned_to !== session.username) return jsonError("เฉพาะครูที่ได้รับมอบหมายเท่านั้นที่เปลี่ยนสถานะเคสได้", 403);
+      if (input.data.assignedTo !== undefined || input.data.severity) return jsonError("ครูที่ปรึกษาไม่มีสิทธิ์เปลี่ยนผู้รับผิดชอบหรือระดับความสำคัญ", 403);
+      const directlyAssigned = item.assigned_to === session.username;
+      const roomAccess = session.advisorId
+        ? await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=? LIMIT 1")
+          .bind(session.advisorId, item.level, item.classroom).first()
+        : null;
+      if (!directlyAssigned && !roomAccess) return jsonError("ไม่มีสิทธิ์แก้ไขเคสนี้", 403);
+      if (input.data.status && !directlyAssigned) return jsonError("เฉพาะครูที่ได้รับมอบหมายเท่านั้นที่เปลี่ยนสถานะเคสได้", 403);
     }
     if (input.data.assignedTo) {
       const assignee = await db.prepare(`SELECT username FROM staff_users
