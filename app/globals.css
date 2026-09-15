@@ -182,7 +182,7 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
 .case-reporter { display:flex; flex-direction:column; gap:2px; }
 .case-reporter>b { font-weight:600; }
 .case-reporter>small { color:var(--muted); font-size:11px; }
-.timeline-item p { font-size:13px; }
+.timeline-item p { font-size:13px; line-height:1.6; white-space:pre-wrap; }
 
 .management-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin:0 auto 20px; }
 .management-summary article { min-height:96px; display:flex; align-items:center; gap:14px; padding:17px 18px; background:white; border:1px solid #e1e6ed; border-radius:17px; box-shadow:0 1px 2px rgba(15,23,42,.03); }

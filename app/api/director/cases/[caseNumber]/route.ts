@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createId, ensureDatabase } from "../../../../../db/bootstrap";
 import { jsonError, requireDirector } from "../../../../../lib/security";
 import { attachAdvisorData, loadRoomAdvisors } from "../../../../../lib/student-advisors";
+import { humanizeTimelineDescription } from "../../../../../lib/case-timeline";
 
 const actionSchema = z.object({
   action: z.enum(["ACKNOWLEDGED", "ORDER", "RETURN_TO_ADMIN", "RESOLVE"]),
@@ -33,7 +34,11 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     const timeline = await db.prepare("SELECT * FROM case_timeline WHERE case_id=? ORDER BY created_at DESC").bind(item.id).all();
     const actions = await db.prepare("SELECT * FROM director_actions WHERE case_id=? ORDER BY created_at DESC").bind(item.id).all();
     const attachments = await db.prepare("SELECT id,original_name,storage_key,mime_type,file_size,created_at FROM case_attachments WHERE case_id=? ORDER BY created_at DESC").bind(item.id).all();
-    return Response.json({ case: caseWithAdvisors, timeline: timeline.results, actions: actions.results, attachments: attachments.results });
+    const readableTimeline = timeline.results.map((entry) => ({
+      ...entry,
+      description: humanizeTimelineDescription((entry as Record<string, unknown>).description),
+    }));
+    return Response.json({ case: caseWithAdvisors, timeline: readableTimeline, actions: actions.results, attachments: attachments.results });
   } catch (error) {
     if (error instanceof Response) return error;
     return jsonError("ไม่สามารถโหลดรายละเอียดเคสได้", 500);

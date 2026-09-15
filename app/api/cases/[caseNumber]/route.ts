@@ -5,6 +5,7 @@ import { jsonError, requireCaseSession } from "../../../../lib/security";
 import { hashPassword } from "../../../../lib/password";
 import { attachAdvisorData, loadRoomAdvisors } from "../../../../lib/student-advisors";
 import { sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
+import { describeCaseUpdate, humanizeTimelineDescription, timelineTitleForUpdate } from "../../../../lib/case-timeline";
 
 const updateSchema = z.object({
   status: z.enum(["NEW", "SCREENING", "ASSIGNED", "IN_PROGRESS", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE", "RESOLVED", "CLOSED", "REOPENED"]).optional(),
@@ -55,7 +56,11 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     const attachments = await db.prepare(
       "SELECT id,original_name,storage_key,mime_type,file_size,created_at FROM case_attachments WHERE case_id=? ORDER BY created_at DESC",
     ).bind(String(item.id)).all();
-    return Response.json({ case: item, timeline: timeline.results, notes: notes.results, attachments: attachments.results });
+    const readableTimeline = timeline.results.map((entry) => ({
+      ...entry,
+      description: humanizeTimelineDescription((entry as Record<string, unknown>).description),
+    }));
+    return Response.json({ case: item, timeline: readableTimeline, notes: notes.results, attachments: attachments.results });
   } catch (error) {
     if (error instanceof Response) return error;
     return jsonError("ไม่สามารถโหลดรายละเอียดเคสได้", 500);
@@ -159,10 +164,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
         ).bind(createId("handoff"), item.id, item.status, toStatus, actor, input.data.assignedTo ?? item.assigned_to, input.data.handoffReason, input.data.dueDate ?? null));
       }
       const timelineAction = isReassignment ? "REASSIGN_CASE" : sendingToDirector ? "SEND_TO_DIRECTOR" : "UPDATE_CASE";
-      const timelineTitle = isReassignment ? "ส่งต่อผู้รับผิดชอบ" : sendingToDirector ? "เสนอผู้อำนวยการ" : "อัปเดตเคส";
+      const timelineTitle = isReassignment ? "ส่งต่อผู้รับผิดชอบ" : sendingToDirector ? "เสนอผู้อำนวยการ" : timelineTitleForUpdate(input.data);
       const timelineDescription = isReassignment
         ? `${item.assigned_to ?? "ยังไม่ได้มอบหมาย"} → ${input.data.assignedTo}: ${input.data.handoffReason}`
-        : JSON.stringify(input.data);
+        : describeCaseUpdate(input.data);
       batch.push(db.prepare(
         "INSERT INTO case_timeline (id,case_id,action,title,description,created_by) VALUES (?,?,?,?,?,?)",
       ).bind(createId("timeline"), item.id, timelineAction, timelineTitle, timelineDescription, actor));

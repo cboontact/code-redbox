@@ -386,6 +386,23 @@ test("shows each reporter's room and linked advisors in staff and director case 
   }
 });
 
+test("renders timeline updates as readable Thai instead of raw JSON", async () => {
+  const [timelineHelper, staffApi, directorApi, styles] = await Promise.all([
+    readFile(new URL("../lib/case-timeline.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/director/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(timelineHelper, /เริ่มคัดกรองเคส/);
+  assert.match(timelineHelper, /รายละเอียด:/);
+  assert.match(timelineHelper, /กำหนดติดตาม:/);
+  assert.match(timelineHelper, /JSON\.parse/);
+  assert.doesNotMatch(staffApi, /: JSON\.stringify\(input\.data\)/);
+  assert.match(staffApi, /humanizeTimelineDescription/);
+  assert.match(directorApi, /humanizeTimelineDescription/);
+  assert.match(styles, /white-space:pre-wrap/);
+});
+
 test("allows only the highest-level admin to close an open case directly with a recorded reason", async () => {
   const [dashboard, caseApi, transitionModal] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
