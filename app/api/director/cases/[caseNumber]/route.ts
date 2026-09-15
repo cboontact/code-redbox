@@ -6,7 +6,7 @@ import { humanizeTimelineDescription } from "../../../../../lib/case-timeline";
 
 const actionSchema = z.object({
   action: z.enum(["ACKNOWLEDGED", "ORDER", "RETURN_TO_ADMIN", "RESOLVE"]),
-  message: z.string().trim().min(2).max(2000),
+  message: z.string().trim().max(2000).optional(),
 });
 
 export async function GET(request: Request, context: { params: Promise<{ caseNumber: string }> }) {
@@ -49,7 +49,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
   try {
     const director = await requireDirector(request);
     const input = actionSchema.safeParse(await request.json());
-    if (!input.success) return jsonError("กรุณาระบุคำสั่งและรายละเอียดให้ครบ");
+    if (!input.success) return jsonError("ข้อมูลคำสั่งไม่ถูกต้อง");
     const db = await ensureDatabase();
     const { caseNumber } = await context.params;
     const item = await db.prepare("SELECT id FROM cases WHERE case_number=? AND status='DIRECTOR_REVIEW'").bind(caseNumber).first<{ id: string }>();
@@ -57,12 +57,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     const nextStatus = input.data.action === "RETURN_TO_ADMIN" ? "ADMIN_REVIEW" : input.data.action === "RESOLVE" ? "PENDING_CLOSE" : input.data.action === "ORDER" ? "DIRECTOR_ORDERED" : "DIRECTOR_REVIEW";
     const title = input.data.action === "ACKNOWLEDGED" ? "ผู้อำนวยการรับทราบ" : input.data.action === "ORDER" ? "ผู้อำนวยการสั่งการ" : input.data.action === "RETURN_TO_ADMIN" ? "ผู้อำนวยการส่งกลับให้คัดกรอง" : "ผู้อำนวยการให้ปิดการดำเนินการ";
     await db.batch([
-      db.prepare("INSERT INTO director_actions (id,case_id,director_id,action,message) VALUES (?,?,?,?,?)").bind(createId("director"), item.id, director, input.data.action, input.data.message),
-      db.prepare("INSERT INTO case_timeline (id,case_id,action,title,description,created_by) VALUES (?,?,?,?,?,?)").bind(createId("timeline"), item.id, `DIRECTOR_${input.data.action}`, title, input.data.message, director),
-      ...(nextStatus !== "DIRECTOR_REVIEW" ? [db.prepare("INSERT INTO case_handoffs (id,case_id,from_status,to_status,from_username,to_username,reason) VALUES (?,?,?,?,?,?,?)").bind(createId("handoff"), item.id, "DIRECTOR_REVIEW", nextStatus, director, null, input.data.message)] : []),
+      db.prepare("INSERT INTO director_actions (id,case_id,director_id,action,message) VALUES (?,?,?,?,?)").bind(createId("director"), item.id, director, input.data.action, input.data.message || null),
+      db.prepare("INSERT INTO case_timeline (id,case_id,action,title,description,created_by) VALUES (?,?,?,?,?,?)").bind(createId("timeline"), item.id, `DIRECTOR_${input.data.action}`, title, input.data.message || null, director),
+      ...(nextStatus !== "DIRECTOR_REVIEW" ? [db.prepare("INSERT INTO case_handoffs (id,case_id,from_status,to_status,from_username,to_username,reason) VALUES (?,?,?,?,?,?,?)").bind(createId("handoff"), item.id, "DIRECTOR_REVIEW", nextStatus, director, null, input.data.message || "ไม่ได้ระบุรายละเอียด")] : []),
       db.prepare("UPDATE cases SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(nextStatus, item.id),
       ...(nextStatus !== "DIRECTOR_REVIEW" ? [db.prepare("UPDATE case_notes SET is_editable=0 WHERE case_id=? AND is_editable=1").bind(item.id)] : []),
-      db.prepare("INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)").bind(createId("audit"), `DIRECTOR_${input.data.action}`, "case", item.id, director, input.data.message),
+      db.prepare("INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)").bind(createId("audit"), `DIRECTOR_${input.data.action}`, "case", item.id, director, input.data.message || null),
     ]);
     return Response.json({ success: true, status: nextStatus });
   } catch (error) {

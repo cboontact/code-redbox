@@ -13,7 +13,7 @@ const updateSchema = z.object({
   assignedTo: z.string().trim().min(1).max(120).optional(),
   note: z.string().trim().min(2).max(2000).optional(),
   noteId: z.string().trim().min(1).max(120).optional(),
-  handoffReason: z.string().trim().min(2).max(1000).optional(),
+  handoffReason: z.string().trim().max(1000).optional(),
   dueDate: z.string().date().optional(),
   resetTrackingPassword: z.string().regex(/^\d{6}$/).optional(),
 });
@@ -112,10 +112,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       if (!assignee) return jsonError("ไม่พบบัญชีผู้รับผิดชอบเคสที่เปิดใช้งาน", 400);
     }
     if (input.data.status === "ASSIGNED" && !(input.data.assignedTo || item.assigned_to)) return jsonError("กรุณามอบหมายผู้รับผิดชอบก่อนส่งต่อ", 400);
-    if (isReassignment && !input.data.handoffReason) return jsonError("กรุณาระบุเหตุผลหรือคำสั่งสำหรับผู้รับช่วงต่อ", 400);
     if (input.data.status && input.data.status !== item.status) {
-      const startsScreening = item.status === "NEW" && input.data.status === "SCREENING";
-      if (!startsScreening && !input.data.handoffReason) return jsonError("กรุณาระบุเหตุผลหรือคำสั่งในการส่งต่อ", 400);
       const transitions: Record<string, string[]> = {
         NEW: ["SCREENING"], SCREENING: ["ASSIGNED"], ASSIGNED: ["IN_PROGRESS"],
         IN_PROGRESS: ["ADMIN_REVIEW"], ADMIN_REVIEW: ["DIRECTOR_REVIEW", "PENDING_CLOSE"],
@@ -169,12 +166,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
         const toStatus = input.data.status && input.data.status !== item.status ? input.data.status : item.status;
         batch.push(db.prepare(
           "INSERT INTO case_handoffs (id,case_id,from_status,to_status,from_username,to_username,reason,due_date) VALUES (?,?,?,?,?,?,?,?)",
-        ).bind(createId("handoff"), item.id, item.status, toStatus, actor, input.data.assignedTo ?? item.assigned_to, input.data.handoffReason ?? "เริ่มคัดกรองเคส", input.data.dueDate ?? null));
+        ).bind(createId("handoff"), item.id, item.status, toStatus, actor, input.data.assignedTo ?? item.assigned_to, input.data.handoffReason || "ไม่ได้ระบุรายละเอียด", input.data.dueDate ?? null));
       }
       const timelineAction = isReassignment ? "REASSIGN_CASE" : sendingToDirector ? "SEND_TO_DIRECTOR" : "UPDATE_CASE";
       const timelineTitle = isReassignment ? "ส่งต่อผู้รับผิดชอบ" : sendingToDirector ? "เสนอผู้อำนวยการ" : timelineTitleForUpdate(input.data);
       const timelineDescription = isReassignment
-        ? `${item.assigned_to ?? "ยังไม่ได้มอบหมาย"} → ${input.data.assignedTo}: ${input.data.handoffReason}`
+        ? `${item.assigned_to ?? "ยังไม่ได้มอบหมาย"} → ${input.data.assignedTo}${input.data.handoffReason ? `\nรายละเอียด: ${input.data.handoffReason}` : ""}`
         : describeCaseUpdate(input.data);
       batch.push(db.prepare(
         "INSERT INTO case_timeline (id,case_id,action,title,description,created_by) VALUES (?,?,?,?,?,?)",

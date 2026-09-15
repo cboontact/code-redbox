@@ -364,7 +364,7 @@ test("lets the current case recipient hand off an open case to another recipient
   assert.match(dashboard, /reassignment/);
   assert.match(caseApi, /const isReassignment = input\.data\.assignedTo/);
   assert.match(caseApi, /REASSIGN_CASE/);
-  assert.match(caseApi, /กรุณาระบุเหตุผลหรือคำสั่งสำหรับผู้รับช่วงต่อ/);
+  assert.doesNotMatch(caseApi, /กรุณาระบุเหตุผลหรือคำสั่งสำหรับผู้รับช่วงต่อ/);
   assert.doesNotMatch(assigneesApi, /ไม่มีสิทธิ์ดูรายชื่อผู้รับผิดชอบ/);
   assert.match(transitionModal, /ยืนยันส่งต่อผู้รับผิดชอบ/);
   assert.match(caseApi, /ต้องเริ่มดำเนินการเคสก่อน จึงจะส่งต่อผู้รับผิดชอบได้/);
@@ -376,8 +376,7 @@ test("starts screening immediately without forcing an unnecessary detail modal",
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /onClick=\{\(\) => updateCase\(\{ status: "SCREENING" \}\)\}/);
-  assert.match(caseApi, /const startsScreening = item\.status === "NEW" && input\.data\.status === "SCREENING"/);
-  assert.match(caseApi, /input\.data\.handoffReason \?\? "เริ่มคัดกรองเคส"/);
+  assert.doesNotMatch(caseApi, /กรุณาระบุเหตุผลหรือคำสั่งในการส่งต่อ/);
 });
 
 test("allows the directly assigned staff member to close their own in-progress case", async () => {
@@ -440,7 +439,7 @@ test("renders timeline updates as readable Thai instead of raw JSON", async () =
   assert.match(styles, /white-space:pre-wrap/);
 });
 
-test("keeps the super-admin close override while requiring a recorded reason", async () => {
+test("keeps the super-admin close override while allowing optional workflow messages", async () => {
   const [dashboard, caseApi, transitionModal] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
@@ -451,8 +450,21 @@ test("keeps the super-admin close override while requiring a recorded reason", a
   assert.match(dashboard, /setTransitionTarget\("CLOSED"\)/);
   assert.match(caseApi, /const directSuperAdminClose/);
   assert.match(caseApi, /const isSuperAdmin = sessionHasRole\(session, "SUPER_ADMIN"\)/);
-  assert.match(caseApi, /!startsScreening && !input\.data\.handoffReason/);
-  assert.match(transitionModal, /สรุปผลก่อนปิดเคส/);
+  assert.doesNotMatch(caseApi, /!input\.data\.handoffReason/);
+  assert.match(transitionModal, /สรุปผลก่อนปิดเคส \(ถ้ามี\)/);
+  assert.doesNotMatch(transitionModal, /required placeholder/);
+  assert.doesNotMatch(transitionModal, /reason\.trim\(\)\.length < 2/);
+});
+
+test("allows director actions without typing an accompanying message", async () => {
+  const [director, directorApi] = await Promise.all([
+    readFile(new URL("../components/DirectorDashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/director/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(director, /เว้นว่างได้/);
+  assert.doesNotMatch(director, /message\.trim\(\)\.length < 2/);
+  assert.match(directorApi, /message: z\.string\(\)\.trim\(\)\.max\(2000\)\.optional\(\)/);
+  assert.doesNotMatch(directorApi, /กรุณาระบุคำสั่งและรายละเอียดให้ครบ/);
 });
 
 test("uses a new private hashed tracking password for every submitted case", async () => {

@@ -2279,7 +2279,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     <div className="direct-close-action">
                       <span>
                         <b>ปิดเคสโดยแอดมิน</b>
-                        <small>ข้ามขั้นตอนที่เหลือ โดยต้องระบุสรุปเหตุผลก่อนปิด</small>
+                        <small>ข้ามขั้นตอนที่เหลือ และเพิ่มสรุปประกอบได้หากต้องการ</small>
                       </span>
                       <button
                         type="button"
@@ -2651,7 +2651,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
           onConfirm={(handoffReason, dueDate) =>
             updateCase({
               status: transitionTarget,
-              handoffReason,
+              ...(handoffReason.trim() ? { handoffReason } : {}),
               ...(transitionTarget === "ASSIGNED" && pendingAssignee
                 ? { assignedTo: pendingAssignee }
                 : {}),
@@ -2671,7 +2671,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
           onConfirm={(handoffReason, dueDate) =>
             updateCase({
               assignedTo: pendingAssignee,
-              handoffReason,
+              ...(handoffReason.trim() ? { handoffReason } : {}),
               ...(dueDate ? { dueDate } : {}),
             })
           }
