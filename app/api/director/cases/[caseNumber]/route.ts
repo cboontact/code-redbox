@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createId, ensureDatabase } from "../../../../../db/bootstrap";
 import { jsonError, requireDirector } from "../../../../../lib/security";
 import { attachAdvisorData, loadRoomAdvisors } from "../../../../../lib/student-advisors";
-import { humanizeTimelineDescription } from "../../../../../lib/case-timeline";
+import { humanizeTimelineEntry } from "../../../../../lib/case-timeline";
 
 const actionSchema = z.object({
   action: z.enum(["ACKNOWLEDGED", "ORDER", "RETURN_TO_ADMIN", "RESOLVE"]),
@@ -34,10 +34,7 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     const timeline = await db.prepare("SELECT * FROM case_timeline WHERE case_id=? ORDER BY created_at DESC").bind(item.id).all();
     const actions = await db.prepare("SELECT * FROM director_actions WHERE case_id=? ORDER BY created_at DESC").bind(item.id).all();
     const attachments = await db.prepare("SELECT id,original_name,storage_key,mime_type,file_size,created_at FROM case_attachments WHERE case_id=? ORDER BY created_at DESC").bind(item.id).all();
-    const readableTimeline = timeline.results.map((entry) => ({
-      ...entry,
-      description: humanizeTimelineDescription((entry as Record<string, unknown>).description),
-    }));
+    const readableTimeline = timeline.results.map((entry) => humanizeTimelineEntry(entry as Record<string, unknown>));
     return Response.json({ case: caseWithAdvisors, timeline: readableTimeline, actions: actions.results, attachments: attachments.results });
   } catch (error) {
     if (error instanceof Response) return error;
@@ -54,7 +51,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     const { caseNumber } = await context.params;
     const item = await db.prepare("SELECT id FROM cases WHERE case_number=? AND status='DIRECTOR_REVIEW'").bind(caseNumber).first<{ id: string }>();
     if (!item) return jsonError("ไม่พบเคสที่เสนอถึงผู้อำนวยการ", 404);
-    const nextStatus = input.data.action === "RETURN_TO_ADMIN" ? "ADMIN_REVIEW" : input.data.action === "RESOLVE" ? "PENDING_CLOSE" : input.data.action === "ORDER" ? "DIRECTOR_ORDERED" : "DIRECTOR_REVIEW";
+    const nextStatus = input.data.action === "RETURN_TO_ADMIN" ? "ADMIN_REVIEW" : input.data.action === "RESOLVE" ? "CLOSED" : input.data.action === "ORDER" ? "DIRECTOR_ORDERED" : "DIRECTOR_REVIEW";
     const title = input.data.action === "ACKNOWLEDGED" ? "ผู้อำนวยการรับทราบ" : input.data.action === "ORDER" ? "ผู้อำนวยการสั่งการ" : input.data.action === "RETURN_TO_ADMIN" ? "ผู้อำนวยการส่งกลับให้คัดกรอง" : "ผู้อำนวยการให้ปิดการดำเนินการ";
     await db.batch([
       db.prepare("INSERT INTO director_actions (id,case_id,director_id,action,message) VALUES (?,?,?,?,?)").bind(createId("director"), item.id, director, input.data.action, input.data.message || null),

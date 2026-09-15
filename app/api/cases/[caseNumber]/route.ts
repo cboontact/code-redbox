@@ -5,7 +5,7 @@ import { jsonError, requireCaseSession } from "../../../../lib/security";
 import { hashPassword } from "../../../../lib/password";
 import { attachAdvisorData, loadRoomAdvisors } from "../../../../lib/student-advisors";
 import { sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
-import { describeCaseUpdate, humanizeTimelineDescription, timelineTitleForUpdate } from "../../../../lib/case-timeline";
+import { describeCaseUpdate, humanizeTimelineEntry, timelineTitleForUpdate } from "../../../../lib/case-timeline";
 
 const updateSchema = z.object({
   status: z.enum(["NEW", "SCREENING", "ASSIGNED", "IN_PROGRESS", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE", "RESOLVED", "CLOSED", "REOPENED"]).optional(),
@@ -56,10 +56,7 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     const attachments = await db.prepare(
       "SELECT id,original_name,storage_key,mime_type,file_size,created_at FROM case_attachments WHERE case_id=? ORDER BY created_at DESC",
     ).bind(String(item.id)).all();
-    const readableTimeline = timeline.results.map((entry) => ({
-      ...entry,
-      description: humanizeTimelineDescription((entry as Record<string, unknown>).description),
-    }));
+    const readableTimeline = timeline.results.map((entry) => humanizeTimelineEntry(entry as Record<string, unknown>));
     return Response.json({ case: item, timeline: readableTimeline, notes: notes.results, attachments: attachments.results });
   } catch (error) {
     if (error instanceof Response) return error;
@@ -83,7 +80,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     const isIntake = sessionHasRole(session, "INTAKE");
     const directlyAssigned = item.assigned_to === session.username;
     const isReassignment = input.data.assignedTo !== undefined && input.data.assignedTo !== item.assigned_to;
-    const isInitialAssignment = item.status === "SCREENING" && input.data.status === "ASSIGNED";
+    const isInitialAssignment = ["NEW", "REOPENED", "SCREENING"].includes(item.status) && input.data.status === "ASSIGNED";
     if (input.data.resetTrackingPassword && !isSuperAdmin) return jsonError("เฉพาะแอดมินระบบเท่านั้นที่รีเซ็ตรหัสติดตามได้", 403);
     if (isReassignment && !isInitialAssignment && item.status !== "IN_PROGRESS") {
       return jsonError("ต้องเริ่มดำเนินการเคสก่อน จึงจะส่งต่อผู้รับผิดชอบได้", 409);
@@ -103,24 +100,26 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
         return jsonError("กรุณาส่งต่อผู้รับผิดชอบแยกจากการเปลี่ยนขั้นตอนเคส", 409);
       }
     }
+    let assignedDisplayName = input.data.assignedTo ?? "";
     if (input.data.assignedTo) {
-      const assignee = await db.prepare(`SELECT username FROM staff_users
+      const assignee = await db.prepare(`SELECT username,display_name FROM staff_users
         WHERE username=? AND is_active=1
         AND (EXISTS (SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=staff_users.id AND sur.role IN ('CASE_OFFICER','ADVISOR'))
           OR (username=? AND EXISTS (SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=staff_users.id AND sur.role='SUPER_ADMIN')))`)
-        .bind(input.data.assignedTo, session.username).first();
+        .bind(input.data.assignedTo, session.username).first<{ username: string; display_name?: string }>();
       if (!assignee) return jsonError("ไม่พบบัญชีผู้รับผิดชอบเคสที่เปิดใช้งาน", 400);
+      assignedDisplayName = assignee.display_name || assignee.username;
     }
     if (input.data.status === "ASSIGNED" && !(input.data.assignedTo || item.assigned_to)) return jsonError("กรุณามอบหมายผู้รับผิดชอบก่อนส่งต่อ", 400);
     if (input.data.status && input.data.status !== item.status) {
       const transitions: Record<string, string[]> = {
-        NEW: ["SCREENING"], SCREENING: ["ASSIGNED"], ASSIGNED: ["IN_PROGRESS"],
-        IN_PROGRESS: ["ADMIN_REVIEW"], ADMIN_REVIEW: ["DIRECTOR_REVIEW", "PENDING_CLOSE"],
+        NEW: ["ASSIGNED"], SCREENING: ["ASSIGNED"], ASSIGNED: ["IN_PROGRESS"],
+        IN_PROGRESS: ["ADMIN_REVIEW"], ADMIN_REVIEW: ["DIRECTOR_REVIEW", "CLOSED"],
         DIRECTOR_ORDERED: ["IN_PROGRESS"], PENDING_CLOSE: ["CLOSED"], RESOLVED: ["CLOSED"],
-        CLOSED: ["REOPENED"], REOPENED: ["SCREENING"],
+        CLOSED: ["REOPENED"], REOPENED: ["ASSIGNED"],
       };
       const roleTransitions: Record<string, string[]> = {
-        INTAKE: ["NEW>SCREENING", "SCREENING>ASSIGNED", "ADMIN_REVIEW>DIRECTOR_REVIEW", "ADMIN_REVIEW>PENDING_CLOSE", "PENDING_CLOSE>CLOSED", "RESOLVED>CLOSED", "REOPENED>SCREENING"],
+        INTAKE: ["NEW>ASSIGNED", "SCREENING>ASSIGNED", "ADMIN_REVIEW>DIRECTOR_REVIEW", "ADMIN_REVIEW>CLOSED", "PENDING_CLOSE>CLOSED", "RESOLVED>CLOSED", "REOPENED>ASSIGNED"],
         CASE_OFFICER: ["ASSIGNED>IN_PROGRESS", "IN_PROGRESS>ADMIN_REVIEW", "DIRECTOR_ORDERED>IN_PROGRESS"],
         ADVISOR: ["ASSIGNED>IN_PROGRESS", "IN_PROGRESS>ADMIN_REVIEW", "DIRECTOR_ORDERED>IN_PROGRESS"],
       };
@@ -168,9 +167,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
           "INSERT INTO case_handoffs (id,case_id,from_status,to_status,from_username,to_username,reason,due_date) VALUES (?,?,?,?,?,?,?,?)",
         ).bind(createId("handoff"), item.id, item.status, toStatus, actor, input.data.assignedTo ?? item.assigned_to, input.data.handoffReason || "ไม่ได้ระบุรายละเอียด", input.data.dueDate ?? null));
       }
-      const timelineAction = isReassignment ? "REASSIGN_CASE" : sendingToDirector ? "SEND_TO_DIRECTOR" : "UPDATE_CASE";
-      const timelineTitle = isReassignment ? "ส่งต่อผู้รับผิดชอบ" : sendingToDirector ? "เสนอผู้อำนวยการ" : timelineTitleForUpdate(input.data);
-      const timelineDescription = isReassignment
+      const timelineAction = isInitialAssignment ? "ASSIGN_CASE" : isReassignment ? "REASSIGN_CASE" : sendingToDirector ? "SEND_TO_DIRECTOR" : "UPDATE_CASE";
+      const timelineTitle = isInitialAssignment ? `คัดกรองและมอบหมายให้ ${assignedDisplayName}` : isReassignment ? "ส่งต่อผู้รับผิดชอบ" : sendingToDirector ? "เสนอผู้อำนวยการ" : timelineTitleForUpdate(input.data);
+      const timelineDescription = isInitialAssignment
+        ? describeCaseUpdate({ handoffReason: input.data.handoffReason, dueDate: input.data.dueDate })
+        : isReassignment
         ? `${item.assigned_to ?? "ยังไม่ได้มอบหมาย"} → ${input.data.assignedTo}${input.data.handoffReason ? `\nรายละเอียด: ${input.data.handoffReason}` : ""}`
         : describeCaseUpdate(input.data);
       batch.push(db.prepare(
@@ -200,7 +201,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     }
     batch.push(db.prepare(
       "INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)",
-    ).bind(createId("audit"), input.data.resetTrackingPassword ? "RESET_TRACKING_PASSWORD" : isReassignment ? "REASSIGN_CASE" : input.data.status === "DIRECTOR_REVIEW" ? "SEND_TO_DIRECTOR" : "UPDATE_CASE", "case", item.id, actor, JSON.stringify({ ...input.data, resetTrackingPassword: input.data.resetTrackingPassword ? "[REDACTED]" : undefined })));
+    ).bind(createId("audit"), input.data.resetTrackingPassword ? "RESET_TRACKING_PASSWORD" : isInitialAssignment ? "ASSIGN_CASE" : isReassignment ? "REASSIGN_CASE" : input.data.status === "DIRECTOR_REVIEW" ? "SEND_TO_DIRECTOR" : "UPDATE_CASE", "case", item.id, actor, JSON.stringify({ ...input.data, resetTrackingPassword: input.data.resetTrackingPassword ? "[REDACTED]" : undefined })));
     await db.batch(batch);
     return Response.json({ success: true });
   } catch (error) {

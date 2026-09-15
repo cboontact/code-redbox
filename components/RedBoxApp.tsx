@@ -138,26 +138,26 @@ const severityLabels: Record<string, string> = {
 
 function availableStatusEntries(current: string, role: string) {
   const edges: Record<string, string[]> = {
-    NEW: ["SCREENING"],
+    NEW: ["ASSIGNED"],
     SCREENING: ["ASSIGNED"],
     ASSIGNED: ["IN_PROGRESS"],
     IN_PROGRESS: ["ADMIN_REVIEW"],
-    ADMIN_REVIEW: ["DIRECTOR_REVIEW", "PENDING_CLOSE"],
+    ADMIN_REVIEW: ["DIRECTOR_REVIEW", "CLOSED"],
     DIRECTOR_ORDERED: ["IN_PROGRESS"],
     PENDING_CLOSE: ["CLOSED"],
     RESOLVED: ["CLOSED"],
     CLOSED: ["REOPENED"],
-    REOPENED: ["SCREENING"],
+    REOPENED: ["ASSIGNED"],
   };
   const roleEdges: Record<string, string[]> = {
     INTAKE: [
-      "NEW>SCREENING",
+      "NEW>ASSIGNED",
       "SCREENING>ASSIGNED",
       "ADMIN_REVIEW>DIRECTOR_REVIEW",
-      "ADMIN_REVIEW>PENDING_CLOSE",
+      "ADMIN_REVIEW>CLOSED",
       "PENDING_CLOSE>CLOSED",
       "RESOLVED>CLOSED",
-      "REOPENED>SCREENING",
+      "REOPENED>ASSIGNED",
     ],
     CASE_OFFICER: [
       "ASSIGNED>IN_PROGRESS",
@@ -1619,7 +1619,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   );
   const canChooseAssignee = Boolean(
     selected &&
-    ((selectedStatus === "SCREENING" && ["SUPER_ADMIN", "INTAKE"].includes(currentRole)) ||
+    ((["NEW", "REOPENED", "SCREENING"].includes(selectedStatus) && ["SUPER_ADMIN", "INTAKE"].includes(currentRole)) ||
       (selectedStatus === "IN_PROGRESS" &&
         (["SUPER_ADMIN", "INTAKE"].includes(currentRole) || isCurrentAssignee))),
   );
@@ -2052,16 +2052,16 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <small>ขั้นตอนถัดไป</small>
                       <b>
                         {{
-                          NEW: "รับเรื่องและเริ่มคัดกรอง",
+                          NEW: "คัดกรองและมอบหมายผู้รับผิดชอบ",
                           SCREENING: "เลือกผู้รับผิดชอบแล้วส่งต่อ",
                           ASSIGNED: "เริ่มดำเนินการเคส",
                           IN_PROGRESS: "ส่งผลการดำเนินงานให้แอดมินตรวจ",
-                          ADMIN_REVIEW: "ตรวจผลแล้วเลือกปิดเคสหรือเสนอผู้อำนวยการ",
+                          ADMIN_REVIEW: "ตรวจผลแล้วปิดเคส หรือเสนอผู้อำนวยการ",
                           DIRECTOR_ORDERED: "รับคำสั่งผู้อำนวยการและดำเนินการต่อ",
                           PENDING_CLOSE: "ยืนยันปิดเคส",
                           RESOLVED: "ยืนยันปิดเคส",
                           CLOSED: "เปิดเคสอีกครั้ง",
-                          REOPENED: "เริ่มคัดกรองใหม่",
+                          REOPENED: "คัดกรองใหม่และมอบหมายผู้รับผิดชอบ",
                         }[String(selected.case.status)]}
                       </b>
                     </span>
@@ -2104,7 +2104,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   <label className="assignee-field">
                     <span>
                       <FontAwesomeIcon icon={faUserShield} />
-                      {selected.case.status === "SCREENING"
+                      {["NEW", "REOPENED", "SCREENING"].includes(String(selected.case.status))
                         ? "1. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ"
                         : isCurrentAssignee && !["SUPER_ADMIN", "INTAKE"].includes(currentRole)
                           ? "ส่งต่อเคสให้ผู้รับผิดชอบคนใหม่"
@@ -2121,7 +2121,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     />
                   </label>
                 )}
-                {selected.case.status === "SCREENING" &&
+                {["NEW", "REOPENED", "SCREENING"].includes(String(selected.case.status)) &&
                   ["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
                     <>
                       <button
@@ -2132,7 +2132,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       >
                         <FontAwesomeIcon icon={faPaperPlane} />
                         {pendingAssigneeName
-                          ? `2. มอบหมายและส่งต่อให้ ${pendingAssigneeName}`
+                          ? `2. คัดกรองและมอบหมายให้ ${pendingAssigneeName}`
                           : "2. เลือกผู้รับผิดชอบก่อนส่งต่อ"}
                       </button>
                       {currentRole === "SUPER_ADMIN" && currentUsername && (
@@ -2152,7 +2152,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       )}
                     </>
                 )}
-                {selected.case.status !== "SCREENING" &&
+                {!['NEW', 'REOPENED', 'SCREENING'].includes(String(selected.case.status)) &&
                   canChooseAssignee &&
                   pendingAssignee &&
                   pendingAssignee !== String(selected.case.assigned_to ?? "") && (
@@ -2163,19 +2163,6 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       onClick={() => setReassignmentOpen(true)}
                     >
                       <FontAwesomeIcon icon={faPaperPlane} /> ส่งต่อเคสให้ {pendingAssigneeName}
-                    </button>
-                  )}
-                {selected.case.status === "NEW" &&
-                  availableStatusEntries("NEW", currentRole).some(
-                    ([value]) => value === "SCREENING",
-                  ) && (
-                    <button
-                      type="button"
-                      className="button primary wide workflow-submit"
-                      disabled={saving}
-                      onClick={() => updateCase({ status: "SCREENING" })}
-                    >
-                      <FontAwesomeIcon icon={faMagnifyingGlass} /> รับเรื่องและเริ่มคัดกรอง
                     </button>
                   )}
                 {selected.case.status === "ASSIGNED" &&
@@ -2235,9 +2222,9 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                         type="button"
                         className="button primary"
                         disabled={saving}
-                        onClick={() => setTransitionTarget("PENDING_CLOSE")}
+                        onClick={() => setTransitionTarget("CLOSED")}
                       >
-                        <FontAwesomeIcon icon={faCheck} /> ผลเรียบร้อย เตรียมปิดเคส
+                        <FontAwesomeIcon icon={faCheck} /> ตรวจผลแล้ว ปิดเคส
                       </button>
                       <button
                         type="button"
@@ -2302,19 +2289,6 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       onClick={() => setTransitionTarget("REOPENED")}
                     >
                       <FontAwesomeIcon icon={faRotate} /> เปิดเคสอีกครั้ง
-                    </button>
-                  )}
-                {selected.case.status === "REOPENED" &&
-                  availableStatusEntries("REOPENED", currentRole).some(
-                    ([value]) => value === "SCREENING",
-                  ) && (
-                    <button
-                      type="button"
-                      className="button primary wide workflow-submit"
-                      disabled={saving}
-                      onClick={() => setTransitionTarget("SCREENING")}
-                    >
-                      <FontAwesomeIcon icon={faMagnifyingGlass} /> เริ่มคัดกรองใหม่
                     </button>
                   )}
               </div>

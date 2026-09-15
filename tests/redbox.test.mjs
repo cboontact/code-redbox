@@ -120,7 +120,7 @@ test("combines screening assignment and handoff into one clear internal workflow
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /1\. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ/);
-  assert.match(dashboard, /2\. มอบหมายและส่งต่อให้/);
+  assert.match(dashboard, /2\. คัดกรองและมอบหมายให้/);
   assert.match(dashboard, /transitionTarget === "ASSIGNED" && pendingAssignee/);
   assert.match(dashboard, /assignedTo: pendingAssignee/);
   assert.match(modal, /ข้อความนี้เป็นบันทึกภายใน/);
@@ -139,7 +139,7 @@ test("shows explicit completion, admin review, and case closing actions", async 
   assert.match(dashboard, /เริ่มดำเนินการเคส/);
   assert.match(dashboard, /ดำเนินการเสร็จแล้ว/);
   assert.match(dashboard, /ส่งผลให้แอดมินตรวจ/);
-  assert.match(dashboard, /ผลเรียบร้อย เตรียมปิดเคส/);
+  assert.match(dashboard, /ตรวจผลแล้ว ปิดเคส/);
   assert.match(dashboard, /ยืนยันปิดเคส/);
   assert.match(modal, /สรุปผลก่อนปิดเคส/);
 });
@@ -154,7 +154,7 @@ test("makes the current status lead to a clear next action instead of a status m
   }
   assert.match(dashboard, /case-workflow-actions/);
   assert.match(dashboard, /scrollIntoView/);
-  assert.match(dashboard, /รับเรื่องและเริ่มคัดกรอง/);
+  assert.match(dashboard, /คัดกรองและมอบหมายผู้รับผิดชอบ/);
   assert.doesNotMatch(dashboard, /เปลี่ยนไปขั้นตอนถัดไป/);
   assert.match(styles, /\.case-workflow-progress/);
   assert.match(styles, /\.status-jump-button/);
@@ -323,8 +323,8 @@ test("supports role-based staff accounts and ordered case handoffs", async () =>
   for (const role of ["SUPER_ADMIN", "INTAKE", "CASE_OFFICER", "ADVISOR", "DIRECTOR"]) assert.match(auth, new RegExp(role));
   assert.match(usersApi, /hashPassword/);
   assert.doesNotMatch(usersApi, /SELECT.*password_hash.*FROM staff_users ORDER BY/);
-  assert.match(caseApi, /NEW: \["SCREENING"\]/);
-  assert.match(caseApi, /ADMIN_REVIEW: \["DIRECTOR_REVIEW", "PENDING_CLOSE"\]/);
+  assert.match(caseApi, /NEW: \["ASSIGNED"\]/);
+  assert.match(caseApi, /ADMIN_REVIEW: \["DIRECTOR_REVIEW", "CLOSED"\]/);
   assert.match(caseApi, /ไม่มีสิทธิ์ส่งเคสข้ามขั้นตอนนี้/);
   assert.match(caseApi, /case_handoffs/);
   assert.match(caseApi, /handoffReason/);
@@ -370,12 +370,15 @@ test("lets the current case recipient hand off an open case to another recipient
   assert.match(caseApi, /ต้องเริ่มดำเนินการเคสก่อน จึงจะส่งต่อผู้รับผิดชอบได้/);
 });
 
-test("starts screening immediately without forcing an unnecessary detail modal", async () => {
+test("combines screening and initial assignment into one action", async () => {
   const [dashboard, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(dashboard, /onClick=\{\(\) => updateCase\(\{ status: "SCREENING" \}\)\}/);
+  assert.match(dashboard, /คัดกรองและมอบหมายให้/);
+  assert.doesNotMatch(dashboard, /รับเรื่องและเริ่มคัดกรอง/);
+  assert.match(caseApi, /\["NEW", "REOPENED", "SCREENING"\]\.includes\(item\.status\)/);
+  assert.match(caseApi, /NEW: \["ASSIGNED"\]/);
   assert.doesNotMatch(caseApi, /กรุณาระบุเหตุผลหรือคำสั่งในการส่งต่อ/);
 });
 
@@ -433,10 +436,23 @@ test("renders timeline updates as readable Thai instead of raw JSON", async () =
   assert.match(timelineHelper, /รายละเอียด:/);
   assert.match(timelineHelper, /กำหนดติดตาม:/);
   assert.match(timelineHelper, /JSON\.parse/);
+  assert.match(timelineHelper, /humanizeTimelineEntry/);
+  assert.match(timelineHelper, /lines\[0\]\.trim\(\) === title\.trim\(\)/);
   assert.doesNotMatch(staffApi, /: JSON\.stringify\(input\.data\)/);
-  assert.match(staffApi, /humanizeTimelineDescription/);
-  assert.match(directorApi, /humanizeTimelineDescription/);
+  assert.match(staffApi, /humanizeTimelineEntry/);
+  assert.match(directorApi, /humanizeTimelineEntry/);
   assert.match(styles, /white-space:pre-wrap/);
+});
+
+test("closes reviewed cases directly and lets a director close without another confirmation", async () => {
+  const [dashboard, caseApi, directorApi] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/director/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /onClick=\{\(\) => setTransitionTarget\("CLOSED"\)\}/);
+  assert.match(caseApi, /ADMIN_REVIEW: \["DIRECTOR_REVIEW", "CLOSED"\]/);
+  assert.match(directorApi, /input\.data\.action === "RESOLVE" \? "CLOSED"/);
 });
 
 test("keeps the super-admin close override while allowing optional workflow messages", async () => {
