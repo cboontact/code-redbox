@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createId, ensureDatabase } from "../../../../../db/bootstrap";
 import { jsonError, requireDirector } from "../../../../../lib/security";
+import { attachAdvisorData, loadRoomAdvisors } from "../../../../../lib/student-advisors";
 
 const actionSchema = z.object({
   action: z.enum(["ACKNOWLEDGED", "ORDER", "RETURN_TO_ADMIN", "RESOLVE"]),
@@ -17,16 +18,22 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
        c.people_involved,c.requested_help,c.safety_level,c.is_anonymous,c.requires_immediate_review,
        c.severity,c.status,c.assigned_to,c.created_at,c.updated_at,cc.name category_name,
        CASE WHEN c.is_anonymous=1 THEN 'ปกปิดตัวตน'
-       ELSE s.prefix||s.first_name||' '||s.last_name END reporter_name
+       ELSE s.prefix||s.first_name||' '||s.last_name END reporter_name,
+       s.student_code,s.prefix,s.first_name,s.last_name,s.level,s.classroom,
+       s.advisor1 legacy_advisor1,s.advisor2 legacy_advisor2
        FROM cases c JOIN case_categories cc ON cc.id=c.category_id
        JOIN students s ON s.id=c.student_id
        WHERE c.case_number=? AND c.status='DIRECTOR_REVIEW'`,
     ).bind(caseNumber).first();
     if (!item) return jsonError("ไม่พบเคสที่เสนอถึงผู้อำนวยการ", 404);
+    const caseWithAdvisors = attachAdvisorData(
+      item as Record<string, unknown>,
+      await loadRoomAdvisors(db, String(item.level), String(item.classroom)),
+    );
     const timeline = await db.prepare("SELECT * FROM case_timeline WHERE case_id=? ORDER BY created_at DESC").bind(item.id).all();
     const actions = await db.prepare("SELECT * FROM director_actions WHERE case_id=? ORDER BY created_at DESC").bind(item.id).all();
     const attachments = await db.prepare("SELECT id,original_name,storage_key,mime_type,file_size,created_at FROM case_attachments WHERE case_id=? ORDER BY created_at DESC").bind(item.id).all();
-    return Response.json({ case: item, timeline: timeline.results, actions: actions.results, attachments: attachments.results });
+    return Response.json({ case: caseWithAdvisors, timeline: timeline.results, actions: actions.results, attachments: attachments.results });
   } catch (error) {
     if (error instanceof Response) return error;
     return jsonError("ไม่สามารถโหลดรายละเอียดเคสได้", 500);

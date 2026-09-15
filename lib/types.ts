@@ -42,4 +42,6 @@ export interface CaseRecord {
   created_at: string;
   reporter_name?: string;
   student_code?: string;
+  level?: string;
+  classroom?: string;
 }

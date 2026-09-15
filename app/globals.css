@@ -179,6 +179,9 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
 .drawer-body { padding:24px; }
 .detail-grid>div { min-height:70px; padding:13px; }
 .detail-grid small,.timeline-item small { font-size:11px; }
+.case-reporter { display:flex; flex-direction:column; gap:2px; }
+.case-reporter>b { font-weight:600; }
+.case-reporter>small { color:var(--muted); font-size:11px; }
 .timeline-item p { font-size:13px; }
 
 .management-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin:0 auto 20px; }

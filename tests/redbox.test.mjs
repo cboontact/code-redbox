@@ -368,6 +368,24 @@ test("lets the current case recipient hand off an open case to another recipient
   assert.match(transitionModal, /ยืนยันส่งต่อผู้รับผิดชอบ/);
 });
 
+test("shows each reporter's room and linked advisors in staff and director case details", async () => {
+  const [dashboard, director, directorApi, staffApi] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/DirectorDashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/director/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  for (const source of [dashboard, director]) {
+    assert.match(source, /ชั้น \/ ห้อง/);
+    assert.match(source, /ครูที่ปรึกษา/);
+    assert.match(source, /advisor_names/);
+  }
+  for (const source of [directorApi, staffApi]) {
+    assert.match(source, /loadRoomAdvisors/);
+    assert.match(source, /attachAdvisorData/);
+  }
+});
+
 test("allows only the highest-level admin to close an open case directly with a recorded reason", async () => {
   const [dashboard, caseApi, transitionModal] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),

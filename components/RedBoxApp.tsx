@@ -59,7 +59,7 @@ type Attachment = {
   file_size: number;
 };
 type Detail = {
-  case: CaseRecord & Record<string, string | number | null>;
+  case: CaseRecord & Record<string, unknown> & { advisor_names?: string[] };
   timeline: Timeline[];
   notes: Note[];
   attachments: Attachment[];
@@ -1138,6 +1138,8 @@ const reviewIcons = {
   ความปลอดภัย: faShieldHalved,
   หลักฐาน: faFileArrowUp,
   ผู้รับผิดชอบ: faUserShield,
+  "ชั้น / ห้อง": faSchool,
+  ครูที่ปรึกษา: faUserGraduate,
 } as const;
 function Review({ label, value }: { label: string; value: string }) {
   const icon = reviewIcons[label as keyof typeof reviewIcons] ?? faCircleInfo;
@@ -1879,7 +1881,12 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                         <td>
                           <StatusBadge value={item.status} />
                         </td>
-                        <td>{item.reporter_name}</td>
+                        <td>
+                          <span className="case-reporter">
+                            <b>{item.reporter_name}</b>
+                            {item.level && item.classroom && <small>{item.level}/{item.classroom}</small>}
+                          </span>
+                        </td>
                         <td>
                           <FontAwesomeIcon icon={faChevronRight} />
                         </td>
@@ -1964,6 +1971,18 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                         selected.case.assigned_to ??
                         "ยังไม่ได้มอบหมาย",
                     )}
+                />
+                <Review
+                  label="ชั้น / ห้อง"
+                  value={`${String(selected.case.level ?? "-")}/${String(selected.case.classroom ?? "-")}`}
+                />
+                <Review
+                  label="ครูที่ปรึกษา"
+                  value={
+                    selected.case.advisor_names?.length
+                      ? selected.case.advisor_names.join(" / ")
+                      : "ยังไม่ได้กำหนดครูที่ปรึกษา"
+                  }
                 />
               </div>
               <div className="note-card">

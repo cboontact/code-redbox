@@ -146,7 +146,7 @@ export async function GET(request: Request) {
       `SELECT ${SAFE_CASE_COLUMNS},cc.name category_name,
        CASE WHEN c.is_anonymous=1 THEN 'ปกปิดตัวตน'
        ELSE s.prefix||s.first_name||' '||s.last_name END reporter_name,
-       s.student_code
+       s.student_code,s.level,s.classroom
        FROM cases c JOIN case_categories cc ON cc.id=c.category_id
        JOIN students s ON s.id=c.student_id
        WHERE ${clauses.join(" AND ")} ORDER BY ${STAFF_CASE_ORDER} LIMIT 100`,
