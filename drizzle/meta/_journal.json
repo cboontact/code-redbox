@@ -43,6 +43,13 @@
       "when": 1786950422928,
       "tag": "0005_optimal_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789474262315,
+      "tag": "0006_lyrical_white_queen",
+      "breakpoints": true
     }
   ]
 }

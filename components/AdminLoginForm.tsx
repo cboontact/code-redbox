@@ -22,7 +22,7 @@ export function AdminLoginForm({ role = "ADMIN" }: { role?: "ADMIN" | "DIRECTOR"
       });
       const data = await response.json() as { error?: string; role?: string };
       if (!response.ok) throw new Error(data.error ?? "ไม่สามารถเข้าสู่ระบบได้");
-      window.location.href = data.role === "DIRECTOR" ? "/director" : "/admin";
+      window.location.href = role === "DIRECTOR" ? "/director" : "/admin";
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "ไม่สามารถเข้าสู่ระบบได้");
     } finally {

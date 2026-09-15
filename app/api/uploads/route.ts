@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { createId, ensureDatabase } from "../../../db/bootstrap";
 import { jsonError, requireAnyStaff } from "../../../lib/security";
 import { hashOpaqueToken, safeTokenEqual } from "../../../lib/opaque-token";
+import { sessionHasAnyRole, sessionHasRole } from "../../../lib/admin-auth";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
@@ -46,13 +47,13 @@ export async function GET(request: Request) {
       FROM case_attachments ca JOIN cases c ON c.id=ca.case_id JOIN students s ON s.id=c.student_id
       WHERE ca.storage_key=?`).bind(key).first<{ storage_key: string; assigned_to: string | null; status: string; level: string; classroom: string }>();
     if (!attachment) return jsonError("ไม่พบไฟล์", 404);
-    let allowed = ["SUPER_ADMIN", "INTAKE"].includes(session.role);
-    if (session.role === "CASE_OFFICER") allowed = attachment.assigned_to === session.username;
-    if (session.role === "DIRECTOR") allowed = attachment.status === "DIRECTOR_REVIEW";
-    if (session.role === "ADVISOR" && session.advisorId) {
+    let allowed = sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE"]);
+    if (sessionHasAnyRole(session, ["CASE_OFFICER", "ADVISOR"]) && attachment.assigned_to === session.username) allowed = true;
+    if (sessionHasRole(session, "DIRECTOR") && attachment.status === "DIRECTOR_REVIEW") allowed = true;
+    if (sessionHasRole(session, "ADVISOR") && session.advisorId) {
       const room = await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=?")
         .bind(session.advisorId, attachment.level, attachment.classroom).first();
-      allowed = Boolean(room);
+      allowed ||= Boolean(room);
     }
     if (!allowed) return jsonError("ไม่มีสิทธิ์เปิดไฟล์หลักฐานนี้", 403);
     const bucket = (env as unknown as { EVIDENCE?: R2Bucket }).EVIDENCE;

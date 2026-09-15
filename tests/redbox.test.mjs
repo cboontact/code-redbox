@@ -127,7 +127,8 @@ test("combines screening assignment and handoff into one clear internal workflow
   assert.match(modal, /นักเรียนไม่เห็นข้อความนี้/);
   assert.match(modal, /ยืนยันมอบหมายและส่งต่อ/);
   assert.match(dashboard, /ให้แอดมินระบบรับดำเนินการเอง/);
-  assert.match(caseApi, /role='SUPER_ADMIN' AND username=\?/);
+  assert.match(caseApi, /staff_user_roles/);
+  assert.match(caseApi, /sur\.role='SUPER_ADMIN'/);
 });
 
 test("shows explicit completion, admin review, and case closing actions", async () => {
@@ -197,7 +198,7 @@ test("allows only the highest-level admin to permanently delete a case", async (
   assert.doesNotMatch(app, /tracking-admin-card/);
   assert.match(app, /currentRole === "SUPER_ADMIN"/);
   assert.match(caseApi, /export async function DELETE/);
-  assert.match(caseApi, /session\.role !== "SUPER_ADMIN"/);
+  assert.match(caseApi, /!sessionHasRole\(session, "SUPER_ADMIN"\)/);
   for (const table of ["director_actions", "case_handoffs", "case_attachments", "case_notes", "case_timeline", "cases"]) {
     assert.match(caseApi, new RegExp(`DELETE FROM ${table}`));
   }
@@ -328,8 +329,8 @@ test("supports role-based staff accounts and ordered case handoffs", async () =>
   assert.match(caseApi, /case_handoffs/);
   assert.match(caseApi, /handoffReason/);
   assert.match(usersUi, /จัดการผู้ใช้งาน/);
-  assert.match(usersUi, /กำหนดระดับสิทธิ์/);
-  assert.match(usersUi, /กำลังเปลี่ยนระดับสิทธิ์/);
+  assert.match(usersUi, /กำหนดบทบาท/);
+  assert.match(usersUi, /กำลังปรับบทบาทของบัญชี/);
   assert.match(usersUi, /สิทธิ์ระดับสูงสุด/);
   assert.match(updateUserApi, /await requireAdmin\(request\)/);
   assert.match(updateUserApi, /ระบบต้องมีแอดมินระบบอย่างน้อย 1 บัญชี/);
@@ -342,8 +343,8 @@ test("shows directly assigned cases to advisor accounts even outside their advis
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(casesApi, /c\.assigned_to=\? OR EXISTS/);
-  assert.match(casesApi, /values\.push\(session\.username, session\.advisorId \?\? ""\)/);
+  assert.match(casesApi, /visibility\.push\("c\.assigned_to=\?"\)/);
+  assert.match(casesApi, /visibility\.join\(" OR "\)/);
   assert.match(caseApi, /const directlyAssigned = String\(caseRow\.assigned_to \?\? ""\) === session\.username/);
   assert.match(caseApi, /if \(!directlyAssigned && !roomAccess\) return jsonError\("ไม่มีสิทธิ์เปิดเคสนี้"/);
   assert.match(caseApi, /const directlyAssigned = item\.assigned_to === session\.username/);
@@ -360,7 +361,7 @@ test("allows only the highest-level admin to close an open case directly with a 
   assert.match(dashboard, /ปิดเคสทันที/);
   assert.match(dashboard, /setTransitionTarget\("CLOSED"\)/);
   assert.match(caseApi, /const directSuperAdminClose/);
-  assert.match(caseApi, /session\.role === "SUPER_ADMIN"/);
+  assert.match(caseApi, /const isSuperAdmin = sessionHasRole\(session, "SUPER_ADMIN"\)/);
   assert.match(caseApi, /if \(!input\.data\.handoffReason\)/);
   assert.match(transitionModal, /สรุปผลก่อนปิดเคส/);
 });
@@ -424,7 +425,26 @@ test("forces initial staff passwords to be changed without resetting changed pas
   assert.match(frame, /ตั้งรหัสผ่านใหม่ก่อนเริ่มใช้งาน/);
   assert.match(changePassword, /must_change_password=0/);
   assert.doesNotMatch(accountScript, /ON CONFLICT\(username\) DO UPDATE SET password_hash/);
-  assert.match(usersApi, /value\.role !== "ADVISOR"/);
+  assert.match(usersApi, /!value\.roles\.includes\("ADVISOR"\)/);
+});
+
+test("supports multiple roles on one staff account with one login", async () => {
+  const [auth, usersApi, updateUserApi, usersUi, schema, migration] = await Promise.all([
+    readFile(new URL("../lib/admin-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/users/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/AdminUsers.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0006_lyrical_white_queen.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(auth, /roles: StaffRole\[\]/);
+  assert.match(auth, /sessionHasAnyRole/);
+  assert.match(usersApi, /roles: rolesSchema/);
+  assert.match(updateUserApi, /DELETE FROM staff_user_roles/);
+  assert.match(usersUi, /เลือกได้หลายรายการ/);
+  assert.match(usersUi, /form\.roles\.includes/);
+  assert.match(schema, /staffUserRoles/);
+  assert.match(migration, /CREATE TABLE `staff_user_roles`/);
 });
 
 test("allocates case numbers atomically for concurrent Cloudflare requests", async () => {

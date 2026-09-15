@@ -3,6 +3,7 @@ import { createId, ensureDatabase } from "../../../db/bootstrap";
 import { jsonError, requireCaseSession } from "../../../lib/security";
 import { hashPassword, verifyPassword } from "../../../lib/password";
 import { createOpaqueToken, hashOpaqueToken } from "../../../lib/opaque-token";
+import { sessionHasAnyRole, sessionHasRole } from "../../../lib/admin-auth";
 
 const SAFE_CASE_COLUMNS = `c.id,c.case_number,c.student_id,c.category_id,c.title,c.description,
   c.location,c.people_involved,c.requested_help,c.safety_level,c.is_anonymous,
@@ -122,13 +123,21 @@ export async function GET(request: Request) {
     const search = url.searchParams.get("search")?.trim();
     const clauses: string[] = ["1=1"];
     const values: string[] = [];
-    if (session.role === "CASE_OFFICER") { clauses.push("c.assigned_to=?"); values.push(session.username); }
-    if (session.role === "ADVISOR") {
-      clauses.push(`(c.assigned_to=? OR EXISTS (
-        SELECT 1 FROM advisor_assignments aa
-        WHERE aa.advisor_id=? AND aa.level=s.level AND aa.classroom=s.classroom
-      ))`);
-      values.push(session.username, session.advisorId ?? "");
+    if (!sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE"])) {
+      const visibility: string[] = [];
+      if (sessionHasAnyRole(session, ["CASE_OFFICER", "ADVISOR"])) {
+        visibility.push("c.assigned_to=?");
+        values.push(session.username);
+      }
+      if (sessionHasRole(session, "ADVISOR") && session.advisorId) {
+        visibility.push(`EXISTS (
+          SELECT 1 FROM advisor_assignments aa
+          WHERE aa.advisor_id=? AND aa.level=s.level AND aa.classroom=s.classroom
+        )`);
+        values.push(session.advisorId);
+      }
+      if (!visibility.length) return Response.json({ cases: [] });
+      clauses.push(`(${visibility.join(" OR ")})`);
     }
     if (status) { clauses.push("c.status=?"); values.push(status); }
     if (severity) { clauses.push("c.severity=?"); values.push(severity); }

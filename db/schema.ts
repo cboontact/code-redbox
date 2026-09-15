@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const students = sqliteTable("students", {
   id: text("id").primaryKey(),
@@ -114,6 +114,15 @@ export const staffUsers = sqliteTable("staff_users", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const staffUserRoles = sqliteTable("staff_user_roles", {
+  userId: text("user_id").notNull().references(() => staffUsers.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.role] }),
+  index("idx_staff_user_roles_role").on(table.role, table.userId),
+]);
 
 export const caseHandoffs = sqliteTable("case_handoffs", {
   id: text("id").primaryKey(),

@@ -168,6 +168,8 @@ export async function ensureDatabase() {
       display_name=excluded.display_name,role='SUPER_ADMIN',advisor_id=NULL,
       must_change_password=0,is_active=1,updated_at=CURRENT_TIMESTAMP`)
     .bind(await hashPassword("cboonta")).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO staff_user_roles (user_id,role) SELECT id,role FROM staff_users").run();
+  await env.DB.prepare("INSERT OR IGNORE INTO staff_user_roles (user_id,role) VALUES ('staff-super-admin','SUPER_ADMIN')").run();
   ready = true;
   return env.DB;
 }

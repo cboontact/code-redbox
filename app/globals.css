@@ -476,6 +476,7 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
 .user-avatar { display:grid; width:42px; height:42px; place-items:center; border-radius:12px; background:#fff0f1; color:#c8323a; font-weight:800; }
 .user-identity,.user-role { display:flex; min-width:0; flex-direction:column; }
 .user-identity small,.user-role small { overflow:hidden; color:var(--muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.user-role-tags { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:4px; }.user-role-tags span { padding:4px 7px; border-radius:999px; color:#a72c34; background:#fff0f1; font-size:10px; font-weight:800; }
 .linked-person { display:inline-flex; align-items:center; gap:5px; width:max-content; max-width:100%; margin-top:5px; padding:4px 7px; border-radius:7px; color:#25737c; background:#edf9fa; font-size:10px; font-weight:700; }
 .protected-account { display:inline-flex; align-items:center; gap:5px; width:max-content; margin-top:5px; padding:4px 7px; border-radius:7px; color:#9a5b12; background:#fff7df; font-size:10px; font-weight:800; }
 .account-status { padding:5px 9px; border-radius:999px; background:#edf0f4; color:#697386; font-size:11px; font-weight:700; }

@@ -4,6 +4,7 @@ import { createId, ensureDatabase } from "../../../../db/bootstrap";
 import { jsonError, requireCaseSession } from "../../../../lib/security";
 import { hashPassword } from "../../../../lib/password";
 import { attachAdvisorData, loadRoomAdvisors } from "../../../../lib/student-advisors";
+import { sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
 
 const updateSchema = z.object({
   status: z.enum(["NEW", "SCREENING", "ASSIGNED", "IN_PROGRESS", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE", "RESOLVED", "CLOSED", "REOPENED"]).optional(),
@@ -33,10 +34,9 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
        WHERE c.case_number=?`,
     ).bind(caseNumber).first<Record<string, unknown>>();
     if (!caseRow) return jsonError("ไม่พบเคส", 404);
-    if (session.role === "CASE_OFFICER" && String(caseRow.assigned_to ?? "") !== session.username) return jsonError("ไม่มีสิทธิ์เปิดเคสนี้", 403);
-    if (session.role === "ADVISOR") {
+    if (!sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE"])) {
       const directlyAssigned = String(caseRow.assigned_to ?? "") === session.username;
-      const roomAccess = session.advisorId
+      const roomAccess = sessionHasRole(session, "ADVISOR") && session.advisorId
         ? await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=? LIMIT 1")
           .bind(session.advisorId, String(caseRow.level), String(caseRow.classroom)).first()
         : null;
@@ -74,13 +74,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       "SELECT c.id,c.status,c.assigned_to,s.level,s.classroom FROM cases c JOIN students s ON s.id=c.student_id WHERE c.case_number=?",
     ).bind(caseNumber).first<{ id: string; status: string; assigned_to: string | null; level: string; classroom: string }>();
     if (!item) return jsonError("ไม่พบเคส", 404);
-    if (input.data.resetTrackingPassword && session.role !== "SUPER_ADMIN") return jsonError("เฉพาะแอดมินระบบเท่านั้นที่รีเซ็ตรหัสติดตามได้", 403);
-    if (session.role === "CASE_OFFICER" && item.assigned_to !== session.username) return jsonError("ไม่มีสิทธิ์แก้ไขเคสนี้", 403);
-    if (session.role === "CASE_OFFICER" && (input.data.assignedTo !== undefined || input.data.severity !== undefined)) return jsonError("ผู้รับผิดชอบไม่มีสิทธิ์เปลี่ยนการมอบหมายหรือระดับความสำคัญ", 403);
-    if (session.role === "ADVISOR") {
-      if (input.data.assignedTo !== undefined || input.data.severity) return jsonError("ครูที่ปรึกษาไม่มีสิทธิ์เปลี่ยนผู้รับผิดชอบหรือระดับความสำคัญ", 403);
+    const isSuperAdmin = sessionHasRole(session, "SUPER_ADMIN");
+    const isIntake = sessionHasRole(session, "INTAKE");
+    if (input.data.resetTrackingPassword && !isSuperAdmin) return jsonError("เฉพาะแอดมินระบบเท่านั้นที่รีเซ็ตรหัสติดตามได้", 403);
+    if (!isSuperAdmin && !isIntake) {
+      if (input.data.assignedTo !== undefined || input.data.severity !== undefined) return jsonError("ผู้รับผิดชอบไม่มีสิทธิ์เปลี่ยนผู้รับผิดชอบหรือระดับความสำคัญ", 403);
       const directlyAssigned = item.assigned_to === session.username;
-      const roomAccess = session.advisorId
+      const roomAccess = sessionHasRole(session, "ADVISOR") && session.advisorId
         ? await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=? LIMIT 1")
           .bind(session.advisorId, item.level, item.classroom).first()
         : null;
@@ -90,7 +90,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     if (input.data.assignedTo) {
       const assignee = await db.prepare(`SELECT username FROM staff_users
         WHERE username=? AND is_active=1
-        AND (role IN ('CASE_OFFICER','ADVISOR') OR (role='SUPER_ADMIN' AND username=?))`)
+        AND (EXISTS (SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=staff_users.id AND sur.role IN ('CASE_OFFICER','ADVISOR'))
+          OR (username=? AND EXISTS (SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=staff_users.id AND sur.role='SUPER_ADMIN')))`)
         .bind(input.data.assignedTo, session.username).first();
       if (!assignee) return jsonError("ไม่พบบัญชีผู้รับผิดชอบเคสที่เปิดใช้งาน", 400);
     }
@@ -111,11 +112,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       const edge = `${item.status}>${input.data.status}`;
       const validStep = transitions[item.status]?.includes(input.data.status);
       const directSuperAdminClose =
-        session.role === "SUPER_ADMIN" &&
+        isSuperAdmin &&
         input.data.status === "CLOSED" &&
         item.status !== "CLOSED";
-      const permitted = directSuperAdminClose ||
-        (session.role === "SUPER_ADMIN" ? validStep : validStep && roleTransitions[session.role]?.includes(edge));
+      const permitted = directSuperAdminClose || (validStep && (
+        isSuperAdmin || Object.entries(roleTransitions).some(([role, edges]) =>
+          sessionHasRole(session, role as "INTAKE" | "CASE_OFFICER" | "ADVISOR") && edges.includes(edge),
+        )
+      ));
       if (!permitted) return jsonError("ไม่มีสิทธิ์ส่งเคสข้ามขั้นตอนนี้", 403);
     }
     if (input.data.noteId && input.data.status && input.data.status !== item.status) {
@@ -181,7 +185,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
 export async function DELETE(request: Request, context: { params: Promise<{ caseNumber: string }> }) {
   try {
     const session = await requireCaseSession(request);
-    if (session.role !== "SUPER_ADMIN") return jsonError("เฉพาะผู้ดูแลระบบระดับสูงสุดเท่านั้นที่ลบเคสได้", 403);
+    if (!sessionHasRole(session, "SUPER_ADMIN")) return jsonError("เฉพาะผู้ดูแลระบบระดับสูงสุดเท่านั้นที่ลบเคสได้", 403);
     const db = await ensureDatabase();
     const { caseNumber } = await context.params;
     const item = await db.prepare("SELECT id,case_number,title FROM cases WHERE case_number=?")
