@@ -10,10 +10,15 @@ const SAFE_CASE_COLUMNS = `c.id,c.case_number,c.student_id,c.category_id,c.title
   c.requires_immediate_review,c.severity,c.status,c.assigned_to,c.created_at,c.updated_at`;
 
 const STAFF_CASE_ORDER = `CASE
-  WHEN c.status IN ('NEW','SCREENING','ASSIGNED') THEN 0
-  WHEN c.status IN ('IN_PROGRESS','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE','REOPENED') THEN 1
+  WHEN c.status IN ('NEW','REOPENED','SCREENING','ASSIGNED') THEN 0
+  WHEN c.status IN ('IN_PROGRESS','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE') THEN 1
   WHEN c.status IN ('RESOLVED','CLOSED') THEN 2
   ELSE 1 END,
+  CASE c.status
+    WHEN 'NEW' THEN 0 WHEN 'REOPENED' THEN 1 WHEN 'SCREENING' THEN 2 WHEN 'ASSIGNED' THEN 3
+    WHEN 'IN_PROGRESS' THEN 4 WHEN 'ADMIN_REVIEW' THEN 5 WHEN 'DIRECTOR_REVIEW' THEN 6
+    WHEN 'DIRECTOR_ORDERED' THEN 7 WHEN 'PENDING_CLOSE' THEN 8 WHEN 'RESOLVED' THEN 9
+    WHEN 'CLOSED' THEN 10 ELSE 11 END,
   c.requires_immediate_review DESC,c.created_at DESC`;
 
 const createSchema = z.object({

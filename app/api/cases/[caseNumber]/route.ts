@@ -82,9 +82,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     const isSuperAdmin = sessionHasRole(session, "SUPER_ADMIN");
     const isIntake = sessionHasRole(session, "INTAKE");
     const directlyAssigned = item.assigned_to === session.username;
-    const reassignmentStatuses = ["ASSIGNED", "IN_PROGRESS", "DIRECTOR_ORDERED"];
     const isReassignment = input.data.assignedTo !== undefined && input.data.assignedTo !== item.assigned_to;
+    const isInitialAssignment = item.status === "SCREENING" && input.data.status === "ASSIGNED";
     if (input.data.resetTrackingPassword && !isSuperAdmin) return jsonError("เฉพาะแอดมินระบบเท่านั้นที่รีเซ็ตรหัสติดตามได้", 403);
+    if (isReassignment && !isInitialAssignment && item.status !== "IN_PROGRESS") {
+      return jsonError("ต้องเริ่มดำเนินการเคสก่อน จึงจะส่งต่อผู้รับผิดชอบได้", 409);
+    }
     if (!isSuperAdmin && !isIntake) {
       if (input.data.severity !== undefined) return jsonError("ผู้รับผิดชอบไม่มีสิทธิ์เปลี่ยนระดับความสำคัญ", 403);
       const roomAccess = sessionHasRole(session, "ADVISOR") && session.advisorId
@@ -93,7 +96,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
         : null;
       if (!directlyAssigned && !roomAccess) return jsonError("ไม่มีสิทธิ์แก้ไขเคสนี้", 403);
       if (input.data.status && !directlyAssigned) return jsonError("เฉพาะครูที่ได้รับมอบหมายเท่านั้นที่เปลี่ยนสถานะเคสได้", 403);
-      if (isReassignment && (!directlyAssigned || !reassignmentStatuses.includes(item.status))) {
+      if (isReassignment && (!directlyAssigned || item.status !== "IN_PROGRESS")) {
         return jsonError("ส่งต่อผู้รับผิดชอบได้เฉพาะผู้รับเคสปัจจุบันและเคสที่กำลังดำเนินงาน", 403);
       }
       if (isReassignment && input.data.status && input.data.status !== item.status) {
@@ -111,7 +114,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     if (input.data.status === "ASSIGNED" && !(input.data.assignedTo || item.assigned_to)) return jsonError("กรุณามอบหมายผู้รับผิดชอบก่อนส่งต่อ", 400);
     if (isReassignment && !input.data.handoffReason) return jsonError("กรุณาระบุเหตุผลหรือคำสั่งสำหรับผู้รับช่วงต่อ", 400);
     if (input.data.status && input.data.status !== item.status) {
-      if (!input.data.handoffReason) return jsonError("กรุณาระบุเหตุผลหรือคำสั่งในการส่งต่อ", 400);
+      const startsScreening = item.status === "NEW" && input.data.status === "SCREENING";
+      if (!startsScreening && !input.data.handoffReason) return jsonError("กรุณาระบุเหตุผลหรือคำสั่งในการส่งต่อ", 400);
       const transitions: Record<string, string[]> = {
         NEW: ["SCREENING"], SCREENING: ["ASSIGNED"], ASSIGNED: ["IN_PROGRESS"],
         IN_PROGRESS: ["ADMIN_REVIEW"], ADMIN_REVIEW: ["DIRECTOR_REVIEW", "PENDING_CLOSE"],
@@ -129,7 +133,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
         isSuperAdmin &&
         input.data.status === "CLOSED" &&
         item.status !== "CLOSED";
-      const permitted = directSuperAdminClose || (validStep && (
+      const directAssigneeClose =
+        directlyAssigned &&
+        item.status === "IN_PROGRESS" &&
+        input.data.status === "CLOSED";
+      const permitted = directSuperAdminClose || directAssigneeClose || (validStep && (
         isSuperAdmin || Object.entries(roleTransitions).some(([role, edges]) =>
           sessionHasRole(session, role as "INTAKE" | "CASE_OFFICER" | "ADVISOR") && edges.includes(edge),
         )
@@ -161,7 +169,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
         const toStatus = input.data.status && input.data.status !== item.status ? input.data.status : item.status;
         batch.push(db.prepare(
           "INSERT INTO case_handoffs (id,case_id,from_status,to_status,from_username,to_username,reason,due_date) VALUES (?,?,?,?,?,?,?,?)",
-        ).bind(createId("handoff"), item.id, item.status, toStatus, actor, input.data.assignedTo ?? item.assigned_to, input.data.handoffReason, input.data.dueDate ?? null));
+        ).bind(createId("handoff"), item.id, item.status, toStatus, actor, input.data.assignedTo ?? item.assigned_to, input.data.handoffReason ?? "เริ่มคัดกรองเคส", input.data.dueDate ?? null));
       }
       const timelineAction = isReassignment ? "REASSIGN_CASE" : sendingToDirector ? "SEND_TO_DIRECTOR" : "UPDATE_CASE";
       const timelineTitle = isReassignment ? "ส่งต่อผู้รับผิดชอบ" : sendingToDirector ? "เสนอผู้อำนวยการ" : timelineTitleForUpdate(input.data);

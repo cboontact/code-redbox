@@ -165,8 +165,8 @@ test("orders the staff case queue by pending, active, then completed work", asyn
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(casesApi, /'NEW','SCREENING','ASSIGNED'\) THEN 0/);
-  assert.match(casesApi, /'IN_PROGRESS','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE','REOPENED'\) THEN 1/);
+  assert.match(casesApi, /'NEW','REOPENED','SCREENING','ASSIGNED'\) THEN 0/);
+  assert.match(casesApi, /'IN_PROGRESS','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE'\) THEN 1/);
   assert.match(casesApi, /'RESOLVED','CLOSED'\) THEN 2/);
   assert.match(casesApi, /c\.requires_immediate_review DESC,c\.created_at DESC/);
   assert.match(dashboard, /ยังไม่ได้ดำเนินการ → กำลังดำเนินการ → เสร็จสิ้น/);
@@ -358,7 +358,8 @@ test("lets the current case recipient hand off an open case to another recipient
     readFile(new URL("../app/api/cases/assignees/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(dashboard, /isCurrentAssignee && \["ASSIGNED", "IN_PROGRESS", "DIRECTOR_ORDERED"\]\.includes/);
+  assert.match(dashboard, /selectedStatus === "IN_PROGRESS"/);
+  assert.doesNotMatch(dashboard, /isCurrentAssignee && \["ASSIGNED", "IN_PROGRESS", "DIRECTOR_ORDERED"\]\.includes/);
   assert.match(dashboard, /ส่งต่อเคสให้ \{pendingAssigneeName\}/);
   assert.match(dashboard, /reassignment/);
   assert.match(caseApi, /const isReassignment = input\.data\.assignedTo/);
@@ -366,6 +367,42 @@ test("lets the current case recipient hand off an open case to another recipient
   assert.match(caseApi, /กรุณาระบุเหตุผลหรือคำสั่งสำหรับผู้รับช่วงต่อ/);
   assert.doesNotMatch(assigneesApi, /ไม่มีสิทธิ์ดูรายชื่อผู้รับผิดชอบ/);
   assert.match(transitionModal, /ยืนยันส่งต่อผู้รับผิดชอบ/);
+  assert.match(caseApi, /ต้องเริ่มดำเนินการเคสก่อน จึงจะส่งต่อผู้รับผิดชอบได้/);
+});
+
+test("starts screening immediately without forcing an unnecessary detail modal", async () => {
+  const [dashboard, caseApi] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /onClick=\{\(\) => updateCase\(\{ status: "SCREENING" \}\)\}/);
+  assert.match(caseApi, /const startsScreening = item\.status === "NEW" && input\.data\.status === "SCREENING"/);
+  assert.match(caseApi, /input\.data\.handoffReason \?\? "เริ่มคัดกรองเคส"/);
+});
+
+test("allows the directly assigned staff member to close their own in-progress case", async () => {
+  const [dashboard, caseApi] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /selected\.case\.status === "IN_PROGRESS" && isCurrentAssignee/);
+  assert.match(dashboard, /ปิดเคสของฉัน/);
+  assert.match(caseApi, /const directAssigneeClose/);
+  assert.match(caseApi, /directSuperAdminClose \|\| directAssigneeClose/);
+});
+
+test("groups and orders statuses from pending work through completion", async () => {
+  const [dashboard, casesApi, styles] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  for (const label of ["ยังไม่ได้ดำเนินการ", "กำลังดำเนินการ", "เสร็จสิ้น"]) assert.match(dashboard, new RegExp(label));
+  assert.match(dashboard, /<optgroup label=\{group\.label\}/);
+  assert.match(dashboard, /case-group-row/);
+  assert.match(casesApi, /WHEN 'NEW' THEN 0/);
+  assert.match(casesApi, /WHEN 'CLOSED' THEN 10/);
+  assert.match(styles, /\.case-group-row\.pending/);
 });
 
 test("shows each reporter's room and linked advisors in staff and director case details", async () => {
@@ -403,7 +440,7 @@ test("renders timeline updates as readable Thai instead of raw JSON", async () =
   assert.match(styles, /white-space:pre-wrap/);
 });
 
-test("allows only the highest-level admin to close an open case directly with a recorded reason", async () => {
+test("keeps the super-admin close override while requiring a recorded reason", async () => {
   const [dashboard, caseApi, transitionModal] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
@@ -414,7 +451,7 @@ test("allows only the highest-level admin to close an open case directly with a 
   assert.match(dashboard, /setTransitionTarget\("CLOSED"\)/);
   assert.match(caseApi, /const directSuperAdminClose/);
   assert.match(caseApi, /const isSuperAdmin = sessionHasRole\(session, "SUPER_ADMIN"\)/);
-  assert.match(caseApi, /if \(!input\.data\.handoffReason\)/);
+  assert.match(caseApi, /!startsScreening && !input\.data\.handoffReason/);
   assert.match(transitionModal, /สรุปผลก่อนปิดเคส/);
 });
 

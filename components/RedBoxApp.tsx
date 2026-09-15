@@ -44,7 +44,7 @@ import {
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { SiCloudflare, SiNextdotjs, SiTypescript } from "react-icons/si";
-import type { CaseRecord, Student } from "../lib/types";
+import type { CaseRecord, CaseStatus, Student } from "../lib/types";
 import { SeverityBadge, StatusBadge } from "./CaseBadge";
 import { EvidencePreview } from "./EvidencePreview";
 import { WorkflowTransitionModal } from "./WorkflowTransitionModal";
@@ -113,6 +113,7 @@ const helpOptions = [
 
 const statusLabels: Record<string, string> = {
   NEW: "รับเรื่องแล้ว",
+  REOPENED: "เปิดเรื่องใหม่",
   SCREENING: "กำลังคัดกรอง",
   ASSIGNED: "มอบหมายแล้ว",
   IN_PROGRESS: "กำลังดำเนินการ",
@@ -122,8 +123,12 @@ const statusLabels: Record<string, string> = {
   PENDING_CLOSE: "รอตรวจสอบก่อนปิด",
   RESOLVED: "ดำเนินการเรียบร้อย",
   CLOSED: "ปิดเรื่อง",
-  REOPENED: "เปิดเรื่องใหม่",
 };
+const statusGroups: Array<{ key: string; label: string; statuses: readonly CaseStatus[] }> = [
+  { key: "pending", label: "ยังไม่ได้ดำเนินการ", statuses: ["NEW", "REOPENED", "SCREENING", "ASSIGNED"] },
+  { key: "active", label: "กำลังดำเนินการ", statuses: ["IN_PROGRESS", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE"] },
+  { key: "completed", label: "เสร็จสิ้น", statuses: ["RESOLVED", "CLOSED"] },
+];
 const severityLabels: Record<string, string> = {
   GENERAL: "ทั่วไป",
   CONCERN: "ควรติดตาม",
@@ -1614,10 +1619,13 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   );
   const canChooseAssignee = Boolean(
     selected &&
-    !["NEW", "CLOSED"].includes(selectedStatus) &&
-    (["SUPER_ADMIN", "INTAKE"].includes(currentRole) ||
-      (isCurrentAssignee && ["ASSIGNED", "IN_PROGRESS", "DIRECTOR_ORDERED"].includes(selectedStatus))),
+    ((selectedStatus === "SCREENING" && ["SUPER_ADMIN", "INTAKE"].includes(currentRole)) ||
+      (selectedStatus === "IN_PROGRESS" &&
+        (["SUPER_ADMIN", "INTAKE"].includes(currentRole) || isCurrentAssignee))),
   );
+  const groupedVisibleCases = statusGroups
+    .map((group) => ({ ...group, cases: visibleCases.filter((item) => group.statuses.includes(item.status)) }))
+    .filter((group) => group.cases.length > 0);
   return (
     <div className="admin-layout">
       <aside className="sidebar">
@@ -1789,10 +1797,10 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 aria-label="กรองสถานะ"
               >
                 <option value="">ทุกสถานะ</option>
-                {Object.entries(statusLabels).map(([value, label]) => (
-                  <option value={value} key={value}>
-                    {label}
-                  </option>
+                {statusGroups.map((group) => (
+                  <optgroup label={group.label} key={group.key}>
+                    {group.statuses.map((value) => <option value={value} key={value}>{statusLabels[value]}</option>)}
+                  </optgroup>
                 ))}
               </select>
               <select
@@ -1855,8 +1863,12 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <th></th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {visibleCases.map((item) => (
+                  {groupedVisibleCases.map((group) => (
+                    <tbody key={group.key}>
+                      <tr className={`case-group-row ${group.key}`}>
+                        <td colSpan={7}><span>{group.label}</span><small>{group.cases.length} เคส</small></td>
+                      </tr>
+                      {group.cases.map((item) => (
                       <tr
                         key={item.id}
                         className={
@@ -1891,8 +1903,9 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                           <FontAwesomeIcon icon={faChevronRight} />
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
+                      ))}
+                    </tbody>
+                  ))}
                 </table>
               </div>
             )}
@@ -2160,7 +2173,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       type="button"
                       className="button primary wide workflow-submit"
                       disabled={saving}
-                      onClick={() => setTransitionTarget("SCREENING")}
+                      onClick={() => updateCase({ status: "SCREENING" })}
                     >
                       <FontAwesomeIcon icon={faMagnifyingGlass} /> รับเรื่องและเริ่มคัดกรอง
                     </button>
@@ -2192,6 +2205,16 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       ส่งผลให้แอดมินตรวจ
                     </button>
                   )}
+                {selected.case.status === "IN_PROGRESS" && isCurrentAssignee && (
+                  <button
+                    type="button"
+                    className="button secondary wide workflow-submit close-case-button"
+                    disabled={saving}
+                    onClick={() => setTransitionTarget("CLOSED")}
+                  >
+                    <FontAwesomeIcon icon={faCheckCircle} /> ปิดเคสของฉัน
+                  </button>
+                )}
                 {selected.case.status === "DIRECTOR_ORDERED" &&
                   availableStatusEntries("DIRECTOR_ORDERED", currentRole).some(
                     ([value]) => value === "IN_PROGRESS",
@@ -2251,6 +2274,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </button>
                   )}
                 {currentRole === "SUPER_ADMIN" &&
+                  !(isCurrentAssignee && selected.case.status === "IN_PROGRESS") &&
                   !["PENDING_CLOSE", "RESOLVED", "CLOSED"].includes(selected.case.status) && (
                     <div className="direct-close-action">
                       <span>
