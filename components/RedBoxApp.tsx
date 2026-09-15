@@ -1452,6 +1452,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [currentUsername, setCurrentUsername] = useState("");
   const [currentDisplayName, setCurrentDisplayName] = useState("");
   const [transitionTarget, setTransitionTarget] = useState("");
+  const [reassignmentOpen, setReassignmentOpen] = useState(false);
   const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
   const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState("");
@@ -1533,6 +1534,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       setNote("");
       setNoteEditorOpen(false);
       setEditingNoteId(null);
+      setReassignmentOpen(false);
       setPendingAssignee(String(data.case.assigned_to ?? ""));
       setPendingAssigneeName(
         String(data.case.assigned_name ?? data.case.assigned_to ?? ""),
@@ -1556,6 +1558,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       notify("บันทึกข้อมูลเรียบร้อยแล้ว");
       setNote("");
       setTransitionTarget("");
+      setReassignmentOpen(false);
       await loadCases();
       await openCase(selected.case.case_number);
     } catch (e) {
@@ -1603,6 +1606,16 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
         : quickFilter === "closed"
           ? cases.filter((item) => ["RESOLVED", "CLOSED"].includes(item.status))
           : cases;
+  const selectedStatus = String(selected?.case.status ?? "");
+  const isCurrentAssignee = Boolean(
+    selected && currentUsername && String(selected.case.assigned_to ?? "") === currentUsername,
+  );
+  const canChooseAssignee = Boolean(
+    selected &&
+    !["NEW", "CLOSED"].includes(selectedStatus) &&
+    (["SUPER_ADMIN", "INTAKE"].includes(currentRole) ||
+      (isCurrentAssignee && ["ASSIGNED", "IN_PROGRESS", "DIRECTOR_ORDERED"].includes(selectedStatus))),
+  );
   return (
     <div className="admin-layout">
       <aside className="sidebar">
@@ -2055,14 +2068,15 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     ))}
                   </select>
                 </label>
-                {["SUPER_ADMIN", "INTAKE"].includes(currentRole) &&
-                  !["NEW", "CLOSED"].includes(String(selected.case.status)) && (
+                {canChooseAssignee && (
                   <label className="assignee-field">
                     <span>
                       <FontAwesomeIcon icon={faUserShield} />
                       {selected.case.status === "SCREENING"
                         ? "1. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ"
-                        : "ผู้รับผิดชอบเคส"}
+                        : isCurrentAssignee && !["SUPER_ADMIN", "INTAKE"].includes(currentRole)
+                          ? "ส่งต่อเคสให้ผู้รับผิดชอบคนใหม่"
+                          : "ผู้รับผิดชอบเคส"}
                     </span>
                     <AssigneeCombobox
                       key={String(selected.case.assigned_to ?? "unassigned")}
@@ -2105,18 +2119,18 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                         </button>
                       )}
                     </>
-                  )}
+                )}
                 {selected.case.status !== "SCREENING" &&
-                  ["SUPER_ADMIN", "INTAKE"].includes(currentRole) &&
+                  canChooseAssignee &&
                   pendingAssignee &&
                   pendingAssignee !== String(selected.case.assigned_to ?? "") && (
                     <button
                       type="button"
                       className="button secondary wide workflow-submit"
                       disabled={saving}
-                      onClick={() => updateCase({ assignedTo: pendingAssignee })}
+                      onClick={() => setReassignmentOpen(true)}
                     >
-                      <FontAwesomeIcon icon={faCheck} /> บันทึกผู้รับผิดชอบ
+                      <FontAwesomeIcon icon={faPaperPlane} /> ส่งต่อเคสให้ {pendingAssigneeName}
                     </button>
                   )}
                 {selected.case.status === "NEW" &&
@@ -2598,6 +2612,23 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               ...(transitionTarget === "ASSIGNED" && pendingAssignee
                 ? { assignedTo: pendingAssignee }
                 : {}),
+              ...(dueDate ? { dueDate } : {}),
+            })
+          }
+        />
+      )}
+      {selected && reassignmentOpen && pendingAssignee && (
+        <WorkflowTransitionModal
+          fromLabel={String(selected.case.assigned_name ?? selected.case.assigned_to ?? "ผู้รับผิดชอบเดิม")}
+          toLabel={pendingAssigneeName || pendingAssignee}
+          recipientLabel={pendingAssigneeName || pendingAssignee}
+          reassignment
+          saving={saving}
+          onClose={() => setReassignmentOpen(false)}
+          onConfirm={(handoffReason, dueDate) =>
+            updateCase({
+              assignedTo: pendingAssignee,
+              handoffReason,
               ...(dueDate ? { dueDate } : {}),
             })
           }

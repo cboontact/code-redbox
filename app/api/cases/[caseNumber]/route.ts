@@ -9,7 +9,7 @@ import { sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
 const updateSchema = z.object({
   status: z.enum(["NEW", "SCREENING", "ASSIGNED", "IN_PROGRESS", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE", "RESOLVED", "CLOSED", "REOPENED"]).optional(),
   severity: z.enum(["GENERAL", "CONCERN", "SERIOUS", "CRITICAL"]).optional(),
-  assignedTo: z.string().trim().max(120).optional(),
+  assignedTo: z.string().trim().min(1).max(120).optional(),
   note: z.string().trim().min(2).max(2000).optional(),
   noteId: z.string().trim().min(1).max(120).optional(),
   handoffReason: z.string().trim().min(2).max(1000).optional(),
@@ -76,16 +76,24 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     if (!item) return jsonError("ไม่พบเคส", 404);
     const isSuperAdmin = sessionHasRole(session, "SUPER_ADMIN");
     const isIntake = sessionHasRole(session, "INTAKE");
+    const directlyAssigned = item.assigned_to === session.username;
+    const reassignmentStatuses = ["ASSIGNED", "IN_PROGRESS", "DIRECTOR_ORDERED"];
+    const isReassignment = input.data.assignedTo !== undefined && input.data.assignedTo !== item.assigned_to;
     if (input.data.resetTrackingPassword && !isSuperAdmin) return jsonError("เฉพาะแอดมินระบบเท่านั้นที่รีเซ็ตรหัสติดตามได้", 403);
     if (!isSuperAdmin && !isIntake) {
-      if (input.data.assignedTo !== undefined || input.data.severity !== undefined) return jsonError("ผู้รับผิดชอบไม่มีสิทธิ์เปลี่ยนผู้รับผิดชอบหรือระดับความสำคัญ", 403);
-      const directlyAssigned = item.assigned_to === session.username;
+      if (input.data.severity !== undefined) return jsonError("ผู้รับผิดชอบไม่มีสิทธิ์เปลี่ยนระดับความสำคัญ", 403);
       const roomAccess = sessionHasRole(session, "ADVISOR") && session.advisorId
         ? await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=? LIMIT 1")
           .bind(session.advisorId, item.level, item.classroom).first()
         : null;
       if (!directlyAssigned && !roomAccess) return jsonError("ไม่มีสิทธิ์แก้ไขเคสนี้", 403);
       if (input.data.status && !directlyAssigned) return jsonError("เฉพาะครูที่ได้รับมอบหมายเท่านั้นที่เปลี่ยนสถานะเคสได้", 403);
+      if (isReassignment && (!directlyAssigned || !reassignmentStatuses.includes(item.status))) {
+        return jsonError("ส่งต่อผู้รับผิดชอบได้เฉพาะผู้รับเคสปัจจุบันและเคสที่กำลังดำเนินงาน", 403);
+      }
+      if (isReassignment && input.data.status && input.data.status !== item.status) {
+        return jsonError("กรุณาส่งต่อผู้รับผิดชอบแยกจากการเปลี่ยนขั้นตอนเคส", 409);
+      }
     }
     if (input.data.assignedTo) {
       const assignee = await db.prepare(`SELECT username FROM staff_users
@@ -96,6 +104,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       if (!assignee) return jsonError("ไม่พบบัญชีผู้รับผิดชอบเคสที่เปิดใช้งาน", 400);
     }
     if (input.data.status === "ASSIGNED" && !(input.data.assignedTo || item.assigned_to)) return jsonError("กรุณามอบหมายผู้รับผิดชอบก่อนส่งต่อ", 400);
+    if (isReassignment && !input.data.handoffReason) return jsonError("กรุณาระบุเหตุผลหรือคำสั่งสำหรับผู้รับช่วงต่อ", 400);
     if (input.data.status && input.data.status !== item.status) {
       if (!input.data.handoffReason) return jsonError("กรุณาระบุเหตุผลหรือคำสั่งในการส่งต่อ", 400);
       const transitions: Record<string, string[]> = {
@@ -142,13 +151,21 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       batch.push(db.prepare(`UPDATE cases SET ${updates.join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(...values, item.id));
       if (input.data.status && input.data.status !== item.status) {
         batch.push(db.prepare("UPDATE case_notes SET is_editable=0 WHERE case_id=? AND is_editable=1").bind(item.id));
+      }
+      if ((input.data.status && input.data.status !== item.status) || isReassignment) {
+        const toStatus = input.data.status && input.data.status !== item.status ? input.data.status : item.status;
         batch.push(db.prepare(
           "INSERT INTO case_handoffs (id,case_id,from_status,to_status,from_username,to_username,reason,due_date) VALUES (?,?,?,?,?,?,?,?)",
-        ).bind(createId("handoff"), item.id, item.status, input.data.status, actor, input.data.assignedTo ?? item.assigned_to, input.data.handoffReason, input.data.dueDate ?? null));
+        ).bind(createId("handoff"), item.id, item.status, toStatus, actor, input.data.assignedTo ?? item.assigned_to, input.data.handoffReason, input.data.dueDate ?? null));
       }
+      const timelineAction = isReassignment ? "REASSIGN_CASE" : sendingToDirector ? "SEND_TO_DIRECTOR" : "UPDATE_CASE";
+      const timelineTitle = isReassignment ? "ส่งต่อผู้รับผิดชอบ" : sendingToDirector ? "เสนอผู้อำนวยการ" : "อัปเดตเคส";
+      const timelineDescription = isReassignment
+        ? `${item.assigned_to ?? "ยังไม่ได้มอบหมาย"} → ${input.data.assignedTo}: ${input.data.handoffReason}`
+        : JSON.stringify(input.data);
       batch.push(db.prepare(
         "INSERT INTO case_timeline (id,case_id,action,title,description,created_by) VALUES (?,?,?,?,?,?)",
-      ).bind(createId("timeline"), item.id, sendingToDirector ? "SEND_TO_DIRECTOR" : "UPDATE_CASE", sendingToDirector ? "เสนอผู้อำนวยการ" : "อัปเดตเคส", JSON.stringify(input.data), actor));
+      ).bind(createId("timeline"), item.id, timelineAction, timelineTitle, timelineDescription, actor));
     }
     if (input.data.note) {
       if (input.data.noteId) {
@@ -173,7 +190,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     }
     batch.push(db.prepare(
       "INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)",
-    ).bind(createId("audit"), input.data.resetTrackingPassword ? "RESET_TRACKING_PASSWORD" : input.data.status === "DIRECTOR_REVIEW" ? "SEND_TO_DIRECTOR" : "UPDATE_CASE", "case", item.id, actor, JSON.stringify({ ...input.data, resetTrackingPassword: input.data.resetTrackingPassword ? "[REDACTED]" : undefined })));
+    ).bind(createId("audit"), input.data.resetTrackingPassword ? "RESET_TRACKING_PASSWORD" : isReassignment ? "REASSIGN_CASE" : input.data.status === "DIRECTOR_REVIEW" ? "SEND_TO_DIRECTOR" : "UPDATE_CASE", "case", item.id, actor, JSON.stringify({ ...input.data, resetTrackingPassword: input.data.resetTrackingPassword ? "[REDACTED]" : undefined })));
     await db.batch(batch);
     return Response.json({ success: true });
   } catch (error) {

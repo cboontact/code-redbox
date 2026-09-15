@@ -351,6 +351,23 @@ test("shows directly assigned cases to advisor accounts even outside their advis
   assert.match(caseApi, /if \(input\.data\.status && !directlyAssigned\)/);
 });
 
+test("lets the current case recipient hand off an open case to another recipient", async () => {
+  const [dashboard, caseApi, assigneesApi, transitionModal] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/assignees/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /isCurrentAssignee && \["ASSIGNED", "IN_PROGRESS", "DIRECTOR_ORDERED"\]\.includes/);
+  assert.match(dashboard, /ส่งต่อเคสให้ \{pendingAssigneeName\}/);
+  assert.match(dashboard, /reassignment/);
+  assert.match(caseApi, /const isReassignment = input\.data\.assignedTo/);
+  assert.match(caseApi, /REASSIGN_CASE/);
+  assert.match(caseApi, /กรุณาระบุเหตุผลหรือคำสั่งสำหรับผู้รับช่วงต่อ/);
+  assert.doesNotMatch(assigneesApi, /ไม่มีสิทธิ์ดูรายชื่อผู้รับผิดชอบ/);
+  assert.match(transitionModal, /ยืนยันส่งต่อผู้รับผิดชอบ/);
+});
+
 test("allows only the highest-level admin to close an open case directly with a recorded reason", async () => {
   const [dashboard, caseApi, transitionModal] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
