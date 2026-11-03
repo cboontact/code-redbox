@@ -6,6 +6,7 @@ import { hashPassword } from "../../../../lib/password";
 import { attachAdvisorData, loadRoomAdvisors } from "../../../../lib/student-advisors";
 import { sessionCanViewStudentIdentity, sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
 import { describeCaseUpdate, humanizeTimelineEntry, timelineTitleForUpdate } from "../../../../lib/case-timeline";
+import { isExclusiveReviewPending } from "../../../../lib/exclusive-review";
 
 const statuses = ["NEW", "AFFAIRS_REVIEW", "IN_PROGRESS", "INTAKE_REVIEW", "DEPUTY_REVIEW", "DIRECTOR_REVIEW", "CLOSED", "REOPENED", "SCREENING", "ASSIGNED", "ADMIN_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE", "RESOLVED"] as const;
 const updateSchema = z.object({
@@ -21,7 +22,7 @@ const updateSchema = z.object({
   resetTrackingPassword: z.string().regex(/^\d{6}$/).optional(),
 });
 
-type CaseItem = { id: string; status: string; severity: string; assigned_to: string | null; is_anonymous: number; level: string; classroom: string };
+type CaseItem = { id: string; status: string; severity: string; assigned_to: string | null; exclusive_reviewer_username: string | null; is_anonymous: number; level: string; classroom: string };
 
 async function isAssigned(db: D1Database, caseId: string, username: string) {
   return Boolean(await db.prepare("SELECT id FROM case_assignments WHERE case_id=? AND username=? LIMIT 1").bind(caseId, username).first());
@@ -34,13 +35,14 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     const { caseNumber } = await context.params;
     const caseRow = await db.prepare(`SELECT c.id,c.case_number,c.student_id,c.category_id,c.title,c.description,c.location,
       c.people_involved,c.requested_help,c.safety_level,c.is_anonymous,c.requires_immediate_review,
-      c.severity,c.status,c.assigned_to,assignee.display_name assigned_name,c.created_at,c.updated_at,
+      c.severity,c.status,c.assigned_to,c.exclusive_reviewer_username,assignee.display_name assigned_name,c.created_at,c.updated_at,
       cc.name category_name,s.student_code,s.prefix,s.first_name,s.last_name,
       s.level,s.classroom,s.number,s.advisor1 legacy_advisor1,s.advisor2 legacy_advisor2
       FROM cases c JOIN case_categories cc ON cc.id=c.category_id
       JOIN students s ON s.id=c.student_id LEFT JOIN staff_users assignee ON assignee.username=c.assigned_to
       WHERE c.case_number=?`).bind(caseNumber).first<Record<string, unknown>>();
     if (!caseRow) return jsonError("ไม่พบเคส", 404);
+    if (isExclusiveReviewPending(caseRow) && caseRow.exclusive_reviewer_username !== session.username) return jsonError("ไม่พบเคส", 404);
 
     const caseId = String(caseRow.id);
     const participant = await isAssigned(db, caseId, session.username);
@@ -83,8 +85,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     if (!input.success || Object.keys(input.data).length === 0) return jsonError("ไม่มีข้อมูลสำหรับบันทึก");
     const db = await ensureDatabase();
     const { caseNumber } = await context.params;
-    const item = await db.prepare("SELECT c.id,c.status,c.severity,c.assigned_to,c.is_anonymous,s.level,s.classroom FROM cases c JOIN students s ON s.id=c.student_id WHERE c.case_number=?").bind(caseNumber).first<CaseItem>();
+    const item = await db.prepare("SELECT c.id,c.status,c.severity,c.assigned_to,c.exclusive_reviewer_username,c.is_anonymous,s.level,s.classroom FROM cases c JOIN students s ON s.id=c.student_id WHERE c.case_number=?").bind(caseNumber).first<CaseItem>();
     if (!item) return jsonError("ไม่พบเคส", 404);
+    if (isExclusiveReviewPending(item) && item.exclusive_reviewer_username !== session.username) return jsonError("ไม่พบเคส", 404);
 
     const isSuper = sessionHasRole(session, "SUPER_ADMIN");
     const isIntake = sessionHasRole(session, "INTAKE");
@@ -187,8 +190,9 @@ export async function DELETE(request: Request, context: { params: Promise<{ case
     if (!sessionHasRole(session, "SUPER_ADMIN")) return jsonError("เฉพาะผู้ดูแลระบบระดับสูงสุดเท่านั้นที่ลบเคสได้", 403);
     const db = await ensureDatabase();
     const { caseNumber } = await context.params;
-    const item = await db.prepare("SELECT id,case_number,title FROM cases WHERE case_number=?").bind(caseNumber).first<{ id: string; case_number: string; title: string }>();
+    const item = await db.prepare("SELECT id,case_number,title,status,exclusive_reviewer_username FROM cases WHERE case_number=?").bind(caseNumber).first<{ id: string; case_number: string; title: string; status: string; exclusive_reviewer_username: string | null }>();
     if (!item) return jsonError("ไม่พบเคส", 404);
+    if (isExclusiveReviewPending(item) && item.exclusive_reviewer_username !== session.username) return jsonError("ไม่พบเคส", 404);
     const attachments = await db.prepare("SELECT storage_key FROM case_attachments WHERE case_id=?").bind(item.id).all<{ storage_key: string }>();
     await db.batch([
       db.prepare("DELETE FROM director_actions WHERE case_id=?").bind(item.id), db.prepare("DELETE FROM case_handoffs WHERE case_id=?").bind(item.id),

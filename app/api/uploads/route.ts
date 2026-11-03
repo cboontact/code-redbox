@@ -3,6 +3,7 @@ import { createId, ensureDatabase } from "../../../db/bootstrap";
 import { jsonError, requireAnyStaff } from "../../../lib/security";
 import { hashOpaqueToken, safeTokenEqual } from "../../../lib/opaque-token";
 import { sessionHasAnyRole, sessionHasRole } from "../../../lib/admin-auth";
+import { isExclusiveReviewPending } from "../../../lib/exclusive-review";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
@@ -43,10 +44,11 @@ export async function GET(request: Request) {
     const preview = url.searchParams.get("preview") === "1";
     if (!key) return jsonError("ไม่พบไฟล์", 404);
     const db = await ensureDatabase();
-    const attachment = await db.prepare(`SELECT ca.storage_key,ca.case_id,c.assigned_to,c.status,s.level,s.classroom
+    const attachment = await db.prepare(`SELECT ca.storage_key,ca.case_id,c.assigned_to,c.status,c.exclusive_reviewer_username,s.level,s.classroom
       FROM case_attachments ca JOIN cases c ON c.id=ca.case_id JOIN students s ON s.id=c.student_id
-      WHERE ca.storage_key=?`).bind(key).first<{ storage_key: string; case_id: string; assigned_to: string | null; status: string; level: string; classroom: string }>();
+      WHERE ca.storage_key=?`).bind(key).first<{ storage_key: string; case_id: string; assigned_to: string | null; status: string; exclusive_reviewer_username: string | null; level: string; classroom: string }>();
     if (!attachment) return jsonError("ไม่พบไฟล์", 404);
+    if (isExclusiveReviewPending(attachment) && attachment.exclusive_reviewer_username !== session.username) return jsonError("ไม่พบไฟล์", 404);
     let allowed = sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE"]);
     if (sessionHasAnyRole(session, ["STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "CASE_OFFICER", "ADVISOR"]) && attachment.assigned_to === session.username) allowed = true;
     if (sessionHasRole(session, "STUDENT_AFFAIRS") && attachment.status === "AFFAIRS_REVIEW") allowed = true;

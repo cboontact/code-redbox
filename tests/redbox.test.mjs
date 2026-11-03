@@ -590,6 +590,31 @@ test("shows role tabs and grants anonymous student identity access per user", as
   assert.match(migration, /can_view_student_identity/);
 });
 
+test("routes students from cboonta advisory rooms into an owner-only first review", async () => {
+  const [casesApi, caseDetailApi, uploadsApi, exclusiveReview, dashboard, schema, migration] = await Promise.all([
+    readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/uploads/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/exclusive-review.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0009_owner_advisor_exclusive_review.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(exclusiveReview, /OWNER_REVIEW_USERNAME = "cboonta"/);
+  assert.match(exclusiveReview, /advisor_assignments/);
+  assert.match(exclusiveReview, /source_username=su\.username/);
+  assert.match(casesApi, /findExclusiveReviewerForRoom/);
+  assert.match(casesApi, /exclusive_reviewer_username/);
+  assert.match(casesApi, /c\.exclusive_reviewer_username=\?/);
+  assert.match(caseDetailApi, /isExclusiveReviewPending/);
+  assert.match(caseDetailApi, /exclusive_reviewer_username !== session\.username/);
+  assert.match(uploadsApi, /isExclusiveReviewPending/);
+  assert.match(dashboard, /รอคุณพิจารณาเท่านั้น/);
+  assert.match(dashboard, /selected\.case\.reporter_name/);
+  assert.match(schema, /exclusiveReviewerUsername/);
+  assert.match(migration, /UPDATE `cases` SET `exclusive_reviewer_username`='cboonta'/);
+});
+
 test("allocates case numbers atomically for concurrent Cloudflare requests", async () => {
   const [casesApi, bootstrap] = await Promise.all([
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),

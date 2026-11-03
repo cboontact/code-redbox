@@ -73,6 +73,7 @@ export const cases = sqliteTable("cases", {
   severity: text("severity").notNull().default("WATCH"),
   status: text("status").notNull().default("NEW"),
   assignedTo: text("assigned_to"),
+  exclusiveReviewerUsername: text("exclusive_reviewer_username"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

@@ -54,7 +54,8 @@ const statements = [
     tracking_password_hash TEXT,
     upload_token_hash TEXT, upload_token_expires_at TEXT,
     severity TEXT NOT NULL DEFAULT 'WATCH', status TEXT NOT NULL DEFAULT 'NEW',
-    assigned_to TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    assigned_to TEXT, exclusive_reviewer_username TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS case_sequences (
@@ -174,6 +175,17 @@ export async function ensureDatabase() {
   if (!caseColumns.results.some((column) => column.name === "tracking_password_hash")) {
     await env.DB.prepare("ALTER TABLE cases ADD COLUMN tracking_password_hash TEXT").run();
   }
+  if (!caseColumns.results.some((column) => column.name === "exclusive_reviewer_username")) {
+    await env.DB.prepare("ALTER TABLE cases ADD COLUMN exclusive_reviewer_username TEXT").run();
+    await env.DB.prepare(`UPDATE cases SET exclusive_reviewer_username='cboonta'
+      WHERE status IN ('NEW','REOPENED') AND EXISTS (
+        SELECT 1 FROM students s
+        JOIN advisor_assignments aa ON aa.level=s.level AND aa.classroom=s.classroom
+        JOIN advisors a ON a.id=aa.advisor_id
+        WHERE s.id=cases.student_id AND a.source_username='cboonta'
+      )`).run();
+  }
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cases_exclusive_review ON cases(exclusive_reviewer_username,status)").run();
   await env.DB.prepare(`UPDATE cases SET severity=CASE severity
     WHEN 'GENERAL' THEN 'WATCH' WHEN 'CONCERN' THEN 'MODERATE'
     WHEN 'SERIOUS' THEN 'SEVERE' ELSE severity END

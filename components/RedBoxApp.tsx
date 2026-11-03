@@ -26,6 +26,7 @@ import {
   faHeading,
   faHeart,
   faLightbulb,
+  faLock,
   faLocationDot,
   faMagnifyingGlass,
   faMessage,
@@ -1950,6 +1951,9 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                               ทันที
                             </small>
                           ) : null}
+                          {["NEW", "REOPENED"].includes(item.status) && item.exclusive_reviewer_username === currentUsername ? (
+                            <small className="exclusive-review-label"><FontAwesomeIcon icon={faLock} /> รอคุณพิจารณาเท่านั้น</small>
+                          ) : null}
                         </td>
                         <td>{formatDate(item.created_at)}</td>
                         <td>{item.category_name}</td>
@@ -2015,6 +2019,9 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   <small>ดูขั้นตอนต่อไป</small>
                 </button>
               </div>
+              {["NEW", "REOPENED"].includes(String(selected.case.status)) && selected.case.exclusive_reviewer_username === currentUsername && (
+                <div className="exclusive-review-notice"><FontAwesomeIcon icon={faLock} /><span><b>เคสจากห้องที่คุณเป็นครูที่ปรึกษา</b><small>ขณะนี้มีเพียงบัญชีของคุณที่เห็นเคสนี้ เมื่อส่งต่อแล้วผู้รับช่วงจึงจะเห็นตามสิทธิ์ปกติ</small></span></div>
+              )}
               <h3 className="case-title">
                 <FontAwesomeIcon icon={faMessage} />
                 {selected.case.title}
@@ -2037,11 +2044,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 />
                 <Review
                   label="ผู้แจ้ง"
-                  value={
-                    selected.case.is_anonymous
-                      ? "ปกปิดตัวตน"
-                      : `${selected.case.prefix}${selected.case.first_name} ${selected.case.last_name}`
-                  }
+                  value={String(selected.case.reporter_name ?? `${selected.case.prefix ?? ""}${selected.case.first_name ?? ""} ${selected.case.last_name ?? ""}`.trim())}
                 />
                 <Review
                   label="ผู้รับผิดชอบ"

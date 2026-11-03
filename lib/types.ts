@@ -39,6 +39,7 @@ export interface CaseRecord {
   is_anonymous: number;
   requires_immediate_review: number;
   assigned_to: string | null;
+  exclusive_reviewer_username?: string | null;
   created_at: string;
   reporter_name?: string;
   student_code?: string;
