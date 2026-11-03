@@ -4,7 +4,7 @@ import { createId, ensureDatabase } from "../../../../db/bootstrap";
 import { jsonError, requireCaseSession } from "../../../../lib/security";
 import { hashPassword } from "../../../../lib/password";
 import { attachAdvisorData, loadRoomAdvisors } from "../../../../lib/student-advisors";
-import { sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
+import { sessionCanViewStudentIdentity, sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
 import { describeCaseUpdate, humanizeTimelineEntry, timelineTitleForUpdate } from "../../../../lib/case-timeline";
 
 const statuses = ["NEW", "AFFAIRS_REVIEW", "IN_PROGRESS", "INTAKE_REVIEW", "DEPUTY_REVIEW", "DIRECTOR_REVIEW", "CLOSED", "REOPENED", "SCREENING", "ASSIGNED", "ADMIN_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE", "RESOLVED"] as const;
@@ -52,7 +52,7 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     if (!sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE"]) && !directlyAssigned && !affairsQueue && !roomAccess) return jsonError("ไม่มีสิทธิ์เปิดเคสนี้", 403);
 
     const item = attachAdvisorData(caseRow, await loadRoomAdvisors(db, String(caseRow.level), String(caseRow.classroom))) as Record<string, unknown>;
-    const canRevealIdentity = sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS"]);
+    const canRevealIdentity = sessionCanViewStudentIdentity(session);
     if (Number(caseRow.is_anonymous) === 1 && !canRevealIdentity) {
       item.prefix = ""; item.first_name = "ปกปิดตัวตน"; item.last_name = ""; item.student_code = null; item.reporter_name = "ปกปิดตัวตน";
     } else {

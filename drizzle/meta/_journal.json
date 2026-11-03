@@ -57,6 +57,13 @@
       "when": 1793671200000,
       "tag": "0007_student_affairs_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793674800000,
+      "tag": "0008_student_identity_permission",
+      "breakpoints": true
     }
   ]
 }

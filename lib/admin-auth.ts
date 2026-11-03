@@ -6,7 +6,7 @@ const COOKIE_NAME = "redbox_admin_session";
 const SESSION_AGE_SECONDS = 8 * 60 * 60;
 
 export type StaffRole = "SUPER_ADMIN" | "INTAKE" | "STUDENT_AFFAIRS" | "LEVEL_HEAD" | "TEACHER" | "ADVISOR" | "DEPUTY_DIRECTOR" | "DIRECTOR" | "CASE_OFFICER";
-export type SessionPayload = { userId: string; username: string; displayName: string; role: StaffRole; roles: StaffRole[]; advisorId?: string | null; mustChangePassword?: boolean; exp: number };
+export type SessionPayload = { userId: string; username: string; displayName: string; role: StaffRole; roles: StaffRole[]; advisorId?: string | null; canViewStudentIdentity?: boolean; mustChangePassword?: boolean; exp: number };
 
 const rolePriority: StaffRole[] = ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "DEPUTY_DIRECTOR", "LEVEL_HEAD", "TEACHER", "ADVISOR", "DIRECTOR", "CASE_OFFICER"];
 
@@ -29,6 +29,10 @@ export function sessionHasRole(session: Pick<SessionPayload, "role" | "roles">, 
 
 export function sessionHasAnyRole(session: Pick<SessionPayload, "role" | "roles">, roles: StaffRole[]) {
   return roles.some((role) => sessionHasRole(session, role));
+}
+
+export function sessionCanViewStudentIdentity(session: Pick<SessionPayload, "role" | "roles" | "canViewStudentIdentity">) {
+  return sessionHasRole(session, "SUPER_ADMIN") || Boolean(session.canViewStudentIdentity);
 }
 
 function runtimeEnv() {
@@ -81,14 +85,14 @@ async function safeEqual(left: string, right: string) {
 export async function verifyCredentials(username: string, password: string, requestedPortal: "ADMIN" | "DIRECTOR") {
   const db = await ensureDatabase();
   const user = await db.prepare(
-    "SELECT id,username,password_hash,display_name,role,advisor_id,is_active,must_change_password FROM staff_users WHERE username=?",
-  ).bind(username).first<{ id: string; username: string; password_hash: string; display_name: string; role: StaffRole; advisor_id: string | null; is_active: number; must_change_password: number }>();
+    "SELECT id,username,password_hash,display_name,role,advisor_id,can_view_student_identity,is_active,must_change_password FROM staff_users WHERE username=?",
+  ).bind(username).first<{ id: string; username: string; password_hash: string; display_name: string; role: StaffRole; advisor_id: string | null; can_view_student_identity: number; is_active: number; must_change_password: number }>();
   if (user) {
     const roleRows = await db.prepare("SELECT role FROM staff_user_roles WHERE user_id=? ORDER BY role").bind(user.id).all<{ role: string }>();
     const roles = normalizeRoles(roleRows.results.map((item) => item.role), user.role);
     const role = effectiveRole(roles, requestedPortal);
     if (!user.is_active || !role || !(await verifyPassword(password, user.password_hash))) return false;
-    return { userId: user.id, username: user.username, displayName: user.display_name, role, roles, advisorId: user.advisor_id, mustChangePassword: Boolean(user.must_change_password) };
+    return { userId: user.id, username: user.username, displayName: user.display_name, role, roles, advisorId: user.advisor_id, canViewStudentIdentity: Boolean(user.can_view_student_identity), mustChangePassword: Boolean(user.must_change_password) };
   }
   return false;
 }
@@ -109,12 +113,13 @@ export async function getAdminSession(request: Request): Promise<SessionPayload 
     const valid = parsed.exp > Date.now() && parsed.username && rolePriority.includes(parsed.role);
     if (!valid) return null;
     const db = await ensureDatabase();
-    const active = await db.prepare("SELECT id,role,advisor_id,must_change_password FROM staff_users WHERE id=? AND is_active=1").bind(parsed.userId).first<{ id: string; role: string; advisor_id: string | null; must_change_password: number }>();
+    const active = await db.prepare("SELECT id,role,advisor_id,can_view_student_identity,must_change_password FROM staff_users WHERE id=? AND is_active=1").bind(parsed.userId).first<{ id: string; role: string; advisor_id: string | null; can_view_student_identity: number; must_change_password: number }>();
     if (!active) return null;
     const roleRows = await db.prepare("SELECT role FROM staff_user_roles WHERE user_id=? ORDER BY role").bind(parsed.userId).all<{ role: string }>();
     parsed.roles = normalizeRoles(roleRows.results.map((item) => item.role), active.role);
     if (!sessionHasRole(parsed, parsed.role)) return null;
     parsed.advisorId = active.advisor_id;
+    parsed.canViewStudentIdentity = Boolean(active.can_view_student_identity);
     parsed.mustChangePassword = Boolean(active.must_change_password);
     return parsed;
   } catch {

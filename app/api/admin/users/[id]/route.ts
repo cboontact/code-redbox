@@ -14,6 +14,7 @@ const updateSchema = z.object({
   password: z.string().min(6).max(200).optional(),
   isActive: z.boolean().optional(),
   advisorId: z.string().trim().min(1).nullable().optional(),
+  canViewStudentIdentity: z.boolean().optional(),
 });
 
 function primaryRole(roles: StaffRole[]) {
@@ -61,6 +62,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (input.data.roles) { updates.push("role=?"); values.push(primaryRole(targetRoles)); }
     if (input.data.isActive !== undefined) { updates.push("is_active=?"); values.push(input.data.isActive ? 1 : 0); }
     if (input.data.password) { updates.push("password_hash=?"); values.push(await hashPassword(input.data.password)); updates.push("must_change_password=1"); }
+    if (input.data.canViewStudentIdentity !== undefined) { updates.push("can_view_student_identity=?"); values.push(input.data.canViewStudentIdentity ? 1 : 0); }
     if (input.data.advisorId !== undefined || input.data.roles) { updates.push("advisor_id=?"); values.push(targetAdvisorId); }
 
     const statements: D1PreparedStatement[] = [];

@@ -564,6 +564,32 @@ test("supports multiple roles on one staff account with one login", async () => 
   assert.match(migration, /CREATE TABLE `staff_user_roles`/);
 });
 
+test("shows role tabs and grants anonymous student identity access per user", async () => {
+  const [auth, usersApi, updateUserApi, usersUi, casesApi, caseDetailApi, directorApi, directorDetailApi, schema, migration] = await Promise.all([
+    readFile(new URL("../lib/admin-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/users/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/AdminUsers.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/director/cases/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/director/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0008_student_identity_permission.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(usersUi, /role="tablist"/);
+  assert.match(usersUi, /ดูตัวตนนักเรียน/);
+  assert.match(usersUi, /IDENTITY_ACCESS/);
+  assert.match(usersUi, /canViewStudentIdentity/);
+  assert.match(usersApi, /can_view_student_identity/);
+  assert.match(updateUserApi, /can_view_student_identity=\?/);
+  assert.match(auth, /sessionCanViewStudentIdentity/);
+  assert.match(auth, /canViewStudentIdentity/);
+  for (const route of [casesApi, caseDetailApi, directorApi, directorDetailApi]) assert.match(route, /sessionCanViewStudentIdentity/);
+  assert.match(schema, /canViewStudentIdentity/);
+  assert.match(migration, /can_view_student_identity/);
+});
+
 test("allocates case numbers atomically for concurrent Cloudflare requests", async () => {
   const [casesApi, bootstrap] = await Promise.all([
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),

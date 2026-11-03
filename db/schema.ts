@@ -108,6 +108,7 @@ export const staffUsers = sqliteTable("staff_users", {
   displayName: text("display_name").notNull(),
   role: text("role").notNull(),
   advisorId: text("advisor_id"),
+  canViewStudentIdentity: integer("can_view_student_identity", { mode: "boolean" }).notNull().default(false),
   mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdBy: text("created_by").notNull(),

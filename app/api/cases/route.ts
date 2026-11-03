@@ -3,7 +3,7 @@ import { createId, ensureDatabase } from "../../../db/bootstrap";
 import { jsonError, requireCaseSession } from "../../../lib/security";
 import { hashPassword, verifyPassword } from "../../../lib/password";
 import { createOpaqueToken, hashOpaqueToken } from "../../../lib/opaque-token";
-import { sessionHasAnyRole, sessionHasRole } from "../../../lib/admin-auth";
+import { sessionCanViewStudentIdentity, sessionHasAnyRole, sessionHasRole } from "../../../lib/admin-auth";
 
 const SAFE_CASE_COLUMNS = `c.id,c.case_number,c.student_id,c.category_id,c.title,c.description,
   c.location,c.people_involved,c.requested_help,c.safety_level,c.is_anonymous,
@@ -153,7 +153,7 @@ export async function GET(request: Request) {
     if (status) { clauses.push("c.status=?"); values.push(status); }
     if (severity) { clauses.push("c.severity=?"); values.push(severity); }
     if (search) { clauses.push("(c.case_number LIKE ? OR c.title LIKE ?)"); values.push(`%${search}%`, `%${search}%`); }
-    const revealAnonymous = sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS"]);
+    const revealAnonymous = sessionCanViewStudentIdentity(session);
     const { results } = await db.prepare(
       `SELECT ${SAFE_CASE_COLUMNS},cc.name category_name,
        CASE WHEN c.is_anonymous=1 AND ${revealAnonymous ? "0" : "1"}=1 THEN 'ปกปิดตัวตน'

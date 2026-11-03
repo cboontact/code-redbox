@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createId, ensureDatabase } from "../../../../../db/bootstrap";
-import { getAdminSession, sessionHasAnyRole, sessionHasRole } from "../../../../../lib/admin-auth";
+import { getAdminSession, sessionCanViewStudentIdentity, sessionHasAnyRole, sessionHasRole } from "../../../../../lib/admin-auth";
 import { jsonError } from "../../../../../lib/security";
 import { attachAdvisorData, loadRoomAdvisors } from "../../../../../lib/student-advisors";
 import { humanizeTimelineEntry } from "../../../../../lib/case-timeline";
@@ -28,7 +28,11 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
       WHERE c.case_number=? AND c.status IN (${placeholders})`).bind(caseNumber, ...statuses).first<Record<string, unknown>>();
     if (!row) return jsonError("ไม่พบเคสในคิวฝ่ายบริหาร", 404);
     const item = attachAdvisorData(row, await loadRoomAdvisors(db, String(row.level), String(row.classroom))) as Record<string, unknown>;
-    item.reporter_name = `${String(row.prefix ?? "")}${String(row.first_name ?? "")} ${String(row.last_name ?? "")}`.trim();
+    if (Number(row.is_anonymous) === 1 && !sessionCanViewStudentIdentity(session)) {
+      item.prefix = ""; item.first_name = "ปกปิดตัวตน"; item.last_name = ""; item.student_code = null; item.reporter_name = "ปกปิดตัวตน";
+    } else {
+      item.reporter_name = `${String(row.prefix ?? "")}${String(row.first_name ?? "")} ${String(row.last_name ?? "")}`.trim();
+    }
     const [timeline, attachments, assignments] = await Promise.all([
       db.prepare("SELECT * FROM case_timeline WHERE case_id=? ORDER BY created_at DESC").bind(String(row.id)).all(),
       db.prepare("SELECT id,original_name,storage_key,mime_type,file_size,created_at FROM case_attachments WHERE case_id=? ORDER BY created_at DESC").bind(String(row.id)).all(),

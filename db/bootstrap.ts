@@ -19,6 +19,7 @@ const statements = [
     id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL, role TEXT NOT NULL,
     advisor_id TEXT,
+    can_view_student_identity INTEGER NOT NULL DEFAULT 0,
     must_change_password INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
     created_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -143,6 +144,10 @@ export async function ensureDatabase() {
     await env.DB.prepare("ALTER TABLE staff_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0").run();
     await env.DB.prepare("UPDATE staff_users SET must_change_password=1 WHERE username<>'cboonta'").run();
   }
+  if (!staffColumns.results.some((column) => column.name === "can_view_student_identity")) {
+    await env.DB.prepare("ALTER TABLE staff_users ADD COLUMN can_view_student_identity INTEGER NOT NULL DEFAULT 0").run();
+    await env.DB.prepare("UPDATE staff_users SET can_view_student_identity=1 WHERE role='SUPER_ADMIN' OR id IN (SELECT user_id FROM staff_user_roles WHERE role='SUPER_ADMIN')").run();
+  }
   await env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_users_advisor_unique
     ON staff_users(advisor_id) WHERE advisor_id IS NOT NULL`).run();
   const advisorColumns = await env.DB.prepare("PRAGMA table_info(advisors)").all<{ name: string }>();
@@ -181,11 +186,11 @@ export async function ensureDatabase() {
     ),
   );
   await env.DB.prepare(`INSERT INTO staff_users
-    (id,username,password_hash,display_name,role,advisor_id,must_change_password,is_active,created_by)
-    VALUES ('staff-super-admin','cboonta',?,'ผู้ดูแลระบบสูงสุด','SUPER_ADMIN',NULL,0,1,'system')
+    (id,username,password_hash,display_name,role,advisor_id,can_view_student_identity,must_change_password,is_active,created_by)
+    VALUES ('staff-super-admin','cboonta',?,'ผู้ดูแลระบบสูงสุด','SUPER_ADMIN',NULL,1,0,1,'system')
     ON CONFLICT(username) DO UPDATE SET
       password_hash=CASE WHEN staff_users.password_hash LIKE 'pbkdf2$%' THEN excluded.password_hash ELSE staff_users.password_hash END,
-      display_name=excluded.display_name,role='SUPER_ADMIN',advisor_id=NULL,
+      display_name=excluded.display_name,role='SUPER_ADMIN',advisor_id=NULL,can_view_student_identity=1,
       must_change_password=0,is_active=1,updated_at=CURRENT_TIMESTAMP`)
     .bind(await hashPassword("cboonta")).run();
   await env.DB.prepare("INSERT OR IGNORE INTO staff_user_roles (user_id,role) SELECT id,role FROM staff_users").run();

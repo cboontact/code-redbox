@@ -1,5 +1,5 @@
 import { ensureDatabase } from "../../../../db/bootstrap";
-import { getAdminSession, sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
+import { getAdminSession, sessionCanViewStudentIdentity, sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
 import { jsonError } from "../../../../lib/security";
 
 export async function GET(request: Request) {
@@ -11,8 +11,9 @@ export async function GET(request: Request) {
       ? ["DEPUTY_REVIEW", "DIRECTOR_REVIEW"]
       : [sessionHasRole(session, "DEPUTY_DIRECTOR") ? "DEPUTY_REVIEW" : null, sessionHasRole(session, "DIRECTOR") ? "DIRECTOR_REVIEW" : null].filter((value): value is string => Boolean(value));
     const placeholders = statuses.map(() => "?").join(",");
+    const revealIdentity = sessionCanViewStudentIdentity(session);
     const { results } = await db.prepare(`SELECT c.id,c.case_number,c.title,c.description,c.severity,c.status,c.assigned_to,c.created_at,c.updated_at,
-      cc.name category_name,s.prefix||s.first_name||' '||s.last_name reporter_name,s.level,s.classroom
+      cc.name category_name,CASE WHEN c.is_anonymous=1 AND ${revealIdentity ? "0" : "1"}=1 THEN 'ปกปิดตัวตน' ELSE s.prefix||s.first_name||' '||s.last_name END reporter_name,s.level,s.classroom
       FROM cases c JOIN case_categories cc ON cc.id=c.category_id JOIN students s ON s.id=c.student_id
       WHERE c.status IN (${placeholders})
       ORDER BY CASE c.severity WHEN 'CRITICAL' THEN 1 WHEN 'SEVERE' THEN 2 WHEN 'MODERATE' THEN 3 ELSE 4 END,c.created_at DESC`).bind(...statuses).all();
