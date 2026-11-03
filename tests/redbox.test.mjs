@@ -102,15 +102,21 @@ test("does not ship unfinished menu copy", async () => {
   assert.match(app, /เสนอผู้อำนวยการ/);
 });
 
-test("renders workflow transitions above the case drawer", async () => {
-  const [modal, styles] = await Promise.all([
+test("renders workflow transitions above the responsive case modal", async () => {
+  const [dashboard, modal, styles] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
+  assert.match(dashboard, /className="case-detail-modal" role="dialog" aria-modal="true"/);
+  assert.match(dashboard, /document\.body\.style\.overflow = "hidden"/);
   assert.match(modal, /createPortal/);
   assert.match(modal, /document\.body/);
   assert.match(styles, /\.modal-backdrop\s*\{[^}]*position:fixed/);
   assert.match(styles, /\.modal-backdrop\s*\{[^}]*z-index:1000/);
+  assert.match(styles, /\.case-modal-backdrop\s*\{[^}]*place-items:center/);
+  assert.match(styles, /\.case-detail-modal\s*\{[^}]*max-height:calc\(100dvh - 48px\)/);
+  assert.match(styles, /\.case-detail-modal\s*\{[^}]*border-radius:22px/);
 });
 
 test("routes intake screening to student affairs before team assignment", async () => {

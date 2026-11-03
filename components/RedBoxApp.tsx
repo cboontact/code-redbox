@@ -1595,6 +1595,20 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       })
       .catch(() => undefined);
   }, []);
+  useEffect(() => {
+    if (!selected) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      const childModalOpen = Boolean(previewFile || transitionTarget || reassignmentOpen || resetPasswordOpen || deleteCaseOpen);
+      if (event.key === "Escape" && !childModalOpen && !saving) setSelected(null);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [selected, previewFile, transitionTarget, reassignmentOpen, resetPasswordOpen, deleteCaseOpen, saving]);
   async function openCase(caseNumber: string) {
     try {
       const response = await fetch(`/api/cases/${caseNumber}`);
@@ -1982,25 +1996,25 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       </main>
       {selected && (
         <div
-          className="drawer-backdrop"
+          className="case-modal-backdrop"
           onMouseDown={(e) => {
             if (e.currentTarget === e.target) setSelected(null);
           }}
         >
-          <aside className="case-drawer">
+          <section className="case-detail-modal" role="dialog" aria-modal="true" aria-labelledby="case-detail-title">
             <header>
               <div>
                 <small className="drawer-kicker">
                   <FontAwesomeIcon icon={faFolderOpen} />
                   รายละเอียดเคส
                 </small>
-                <h2>{selected.case.case_number}</h2>
+                <h2 id="case-detail-title">{selected.case.case_number}</h2>
               </div>
               <button onClick={() => setSelected(null)} aria-label="ปิด">
                 <FontAwesomeIcon icon={faXmark} />
               </button>
             </header>
-            <div className="drawer-body">
+            <div className="case-modal-body">
               <div className="case-badges">
                 <SeverityBadge value={String(selected.case.severity)} />
                 <button
@@ -2522,7 +2536,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 </section>
               )}
             </div>
-          </aside>
+          </section>
         </div>
       )}
       {selected && resetPasswordOpen && (
