@@ -43,3 +43,7 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# presentation is maintained in its own repository:
+# https://github.com/cboontact/redbox-presentation
+/presentation/
