@@ -1,5 +1,5 @@
-export type Severity = "GENERAL" | "CONCERN" | "SERIOUS" | "CRITICAL";
-export type CaseStatus = "NEW" | "SCREENING" | "ASSIGNED" | "IN_PROGRESS" | "ADMIN_REVIEW" | "DIRECTOR_REVIEW" | "DIRECTOR_ORDERED" | "PENDING_CLOSE" | "RESOLVED" | "CLOSED" | "REOPENED";
+export type Severity = "WATCH" | "MODERATE" | "SEVERE" | "CRITICAL";
+export type CaseStatus = "NEW" | "AFFAIRS_REVIEW" | "IN_PROGRESS" | "INTAKE_REVIEW" | "DEPUTY_REVIEW" | "DIRECTOR_REVIEW" | "CLOSED" | "REOPENED" | "SCREENING" | "ASSIGNED" | "ADMIN_REVIEW" | "DIRECTOR_ORDERED" | "PENDING_CLOSE" | "RESOLVED";
 
 export interface AdvisorSummary {
   id: string;

@@ -70,7 +70,7 @@ export const cases = sqliteTable("cases", {
   trackingPasswordHash: text("tracking_password_hash"),
   uploadTokenHash: text("upload_token_hash"),
   uploadTokenExpiresAt: text("upload_token_expires_at"),
-  severity: text("severity").notNull().default("GENERAL"),
+  severity: text("severity").notNull().default("WATCH"),
   status: text("status").notNull().default("NEW"),
   assignedTo: text("assigned_to"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -135,6 +135,22 @@ export const caseHandoffs = sqliteTable("case_handoffs", {
   dueDate: text("due_date"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const caseAssignments = sqliteTable("case_assignments", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => staffUsers.id),
+  username: text("username").notNull(),
+  assignmentRole: text("assignment_role").notNull().default("MEMBER"),
+  status: text("status").notNull().default("ASSIGNED"),
+  assignedBy: text("assigned_by").notNull(),
+  completedAt: text("completed_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("case_assignments_case_user_unique").on(table.caseId, table.userId),
+  index("idx_case_assignments_user_status").on(table.username, table.status),
+]);
 
 export const directorActions = sqliteTable("director_actions", {
   id: text("id").primaryKey(),

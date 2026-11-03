@@ -1,8 +1,11 @@
 const statusLabels: Record<string, string> = {
   NEW: "รับเรื่องแล้ว",
+  AFFAIRS_REVIEW: "ส่งให้ทีมกิจการนักเรียนพิจารณา",
   SCREENING: "เริ่มคัดกรองเคส",
   ASSIGNED: "มอบหมายผู้รับผิดชอบแล้ว",
   IN_PROGRESS: "เริ่มดำเนินการเคส",
+  INTAKE_REVIEW: "ส่งผลกลับเจ้าหน้าที่รับเรื่อง",
+  DEPUTY_REVIEW: "ส่งให้รองผู้อำนวยการพิจารณา",
   ADMIN_REVIEW: "ส่งผลให้ผู้ดูแลตรวจสอบ",
   DIRECTOR_REVIEW: "เสนอเรื่องให้ผู้อำนวยการพิจารณา",
   DIRECTOR_ORDERED: "ผู้อำนวยการมีคำสั่งให้ดำเนินการ",
@@ -13,10 +16,13 @@ const statusLabels: Record<string, string> = {
 };
 
 const severityLabels: Record<string, string> = {
-  GENERAL: "ทั่วไป",
-  CONCERN: "ควรติดตาม",
-  SERIOUS: "ร้ายแรง",
-  CRITICAL: "เร่งด่วน",
+  GENERAL: "เฝ้าระวัง",
+  CONCERN: "เสี่ยงปานกลาง",
+  SERIOUS: "รุนแรง",
+  WATCH: "เฝ้าระวัง",
+  MODERATE: "เสี่ยงปานกลาง",
+  SEVERE: "รุนแรง",
+  CRITICAL: "วิกฤต",
 };
 
 function thaiDate(value: string) {
@@ -53,7 +59,7 @@ export function humanizeTimelineDescription(description: unknown, title?: unknow
     const lines = value.split("\n");
     if (typeof title === "string" && lines[0].trim() === title.trim()) lines.shift();
     const readable = lines.join("\n").trim();
-    const initialAssignment = readable.match(/^ยังไม่ได้มอบหมาย → ([^:\n]+)(?:: (.*))?$/s);
+    const initialAssignment = readable.match(/^ยังไม่ได้มอบหมาย → ([^:\n]+)(?:: ([\s\S]*))?$/);
     if (initialAssignment) return [`มอบหมายให้ ${initialAssignment[1].trim()}`, initialAssignment[2]?.trim() ? `รายละเอียด: ${initialAssignment[2].trim()}` : ""].filter(Boolean).join("\n");
     return readable || null;
   }

@@ -4,9 +4,9 @@ import { getAdminSession, requireAdmin, type StaffRole } from "../../../../../li
 import { hashPassword } from "../../../../../lib/password";
 import { jsonError } from "../../../../../lib/security";
 
-const roleSchema = z.enum(["SUPER_ADMIN", "INTAKE", "CASE_OFFICER", "ADVISOR", "DIRECTOR"]);
-const rolesSchema = z.array(roleSchema).min(1).max(5).refine((roles) => new Set(roles).size === roles.length);
-const rolePriority: StaffRole[] = ["SUPER_ADMIN", "INTAKE", "CASE_OFFICER", "ADVISOR", "DIRECTOR"];
+const roleSchema = z.enum(["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "ADVISOR", "DEPUTY_DIRECTOR", "DIRECTOR"]);
+const rolesSchema = z.array(roleSchema).min(1).max(8).refine((roles) => new Set(roles).size === roles.length);
+const rolePriority: StaffRole[] = ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "DEPUTY_DIRECTOR", "LEVEL_HEAD", "TEACHER", "ADVISOR", "DIRECTOR", "CASE_OFFICER"];
 
 const updateSchema = z.object({
   displayName: z.string().trim().min(2).max(120).optional(),

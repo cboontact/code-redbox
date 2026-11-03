@@ -15,14 +15,20 @@ const severityIcons: Record<string, IconDefinition> = {
   GENERAL: faCircleInfo,
   CONCERN: faClock,
   SERIOUS: faShieldHalved,
+  WATCH: faCircleInfo,
+  MODERATE: faClock,
+  SEVERE: faShieldHalved,
   CRITICAL: faTriangleExclamation,
 };
 
 const statusIcons: Record<string, IconDefinition> = {
   NEW: faFolderOpen,
+  AFFAIRS_REVIEW: faMagnifyingGlass,
   SCREENING: faMagnifyingGlass,
   ASSIGNED: faFolderOpen,
   IN_PROGRESS: faClock,
+  INTAKE_REVIEW: faMagnifyingGlass,
+  DEPUTY_REVIEW: faGavel,
   ADMIN_REVIEW: faMagnifyingGlass,
   DIRECTOR_REVIEW: faGavel,
   DIRECTOR_ORDERED: faGavel,
@@ -33,17 +39,23 @@ const statusIcons: Record<string, IconDefinition> = {
 };
 
 export const severityLabels: Record<string, string> = {
-  GENERAL: "ทั่วไป",
-  CONCERN: "ควรติดตาม",
-  SERIOUS: "ร้ายแรง",
-  CRITICAL: "เร่งด่วน",
+  GENERAL: "เฝ้าระวัง",
+  CONCERN: "เสี่ยงปานกลาง",
+  SERIOUS: "รุนแรง",
+  WATCH: "เฝ้าระวัง",
+  MODERATE: "เสี่ยงปานกลาง",
+  SEVERE: "รุนแรง",
+  CRITICAL: "วิกฤต",
 };
 
 export const statusLabels: Record<string, string> = {
   NEW: "รับเรื่องแล้ว",
+  AFFAIRS_REVIEW: "รอทีมกิจการนักเรียน",
   SCREENING: "กำลังคัดกรอง",
   ASSIGNED: "มอบหมายแล้ว",
   IN_PROGRESS: "กำลังดำเนินการ",
+  INTAKE_REVIEW: "รอเจ้าหน้าที่ตรวจผล",
+  DEPUTY_REVIEW: "รอรองผู้อำนวยการ",
   ADMIN_REVIEW: "รอเจ้าหน้าที่ตรวจผล",
   DIRECTOR_REVIEW: "เสนอผู้อำนวยการ",
   DIRECTOR_ORDERED: "ผู้อำนวยการสั่งการ",

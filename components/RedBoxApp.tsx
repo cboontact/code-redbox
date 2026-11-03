@@ -63,6 +63,7 @@ type Detail = {
   timeline: Timeline[];
   notes: Note[];
   attachments: Attachment[];
+  assignments: Array<{ id: string; username: string; display_name: string; assignment_role: "LEAD" | "MEMBER"; status: string; role_values?: string }>;
 };
 type Timeline = {
   id: string;
@@ -113,10 +114,13 @@ const helpOptions = [
 
 const statusLabels: Record<string, string> = {
   NEW: "รับเรื่องแล้ว",
+  AFFAIRS_REVIEW: "รอทีมกิจการนักเรียน",
   REOPENED: "เปิดเรื่องใหม่",
   SCREENING: "กำลังคัดกรอง",
   ASSIGNED: "มอบหมายแล้ว",
   IN_PROGRESS: "กำลังดำเนินการ",
+  INTAKE_REVIEW: "รอเจ้าหน้าที่ตรวจผล",
+  DEPUTY_REVIEW: "รอรองผู้อำนวยการ",
   ADMIN_REVIEW: "รอเจ้าหน้าที่ตรวจผล",
   DIRECTOR_REVIEW: "เสนอผู้อำนวยการ",
   DIRECTOR_ORDERED: "ผู้อำนวยการสั่งการ",
@@ -125,32 +129,37 @@ const statusLabels: Record<string, string> = {
   CLOSED: "ปิดเรื่อง",
 };
 const statusGroups: Array<{ key: string; label: string; statuses: readonly CaseStatus[] }> = [
-  { key: "pending", label: "ยังไม่ได้ดำเนินการ", statuses: ["NEW", "REOPENED", "SCREENING", "ASSIGNED"] },
-  { key: "active", label: "กำลังดำเนินการ", statuses: ["IN_PROGRESS", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE"] },
+  { key: "pending", label: "รอพิจารณาและมอบหมาย", statuses: ["NEW", "REOPENED", "AFFAIRS_REVIEW", "DEPUTY_REVIEW", "SCREENING", "ASSIGNED"] },
+  { key: "active", label: "กำลังดำเนินการและตรวจผล", statuses: ["IN_PROGRESS", "INTAKE_REVIEW", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE"] },
   { key: "completed", label: "เสร็จสิ้น", statuses: ["RESOLVED", "CLOSED"] },
 ];
 const severityLabels: Record<string, string> = {
-  GENERAL: "ทั่วไป",
-  CONCERN: "ควรติดตาม",
-  SERIOUS: "ร้ายแรง",
-  CRITICAL: "เร่งด่วน",
+  WATCH: "เฝ้าระวัง",
+  MODERATE: "เสี่ยงปานกลาง",
+  SEVERE: "รุนแรง",
+  CRITICAL: "วิกฤต",
 };
 
 function availableStatusEntries(current: string, role: string) {
   const edges: Record<string, string[]> = {
-    NEW: ["ASSIGNED"],
+    NEW: ["AFFAIRS_REVIEW", "DEPUTY_REVIEW", "CLOSED"],
+    AFFAIRS_REVIEW: ["IN_PROGRESS", "INTAKE_REVIEW"],
     SCREENING: ["ASSIGNED"],
     ASSIGNED: ["IN_PROGRESS"],
-    IN_PROGRESS: ["ADMIN_REVIEW"],
+    IN_PROGRESS: ["INTAKE_REVIEW"],
+    INTAKE_REVIEW: ["IN_PROGRESS", "CLOSED"],
     ADMIN_REVIEW: ["DIRECTOR_REVIEW", "CLOSED"],
     DIRECTOR_ORDERED: ["IN_PROGRESS"],
     PENDING_CLOSE: ["CLOSED"],
     RESOLVED: ["CLOSED"],
     CLOSED: ["REOPENED"],
-    REOPENED: ["ASSIGNED"],
+    REOPENED: ["AFFAIRS_REVIEW", "DEPUTY_REVIEW", "CLOSED"],
   };
   const roleEdges: Record<string, string[]> = {
     INTAKE: [
+      "NEW>AFFAIRS_REVIEW", "NEW>DEPUTY_REVIEW", "NEW>CLOSED",
+      "REOPENED>AFFAIRS_REVIEW", "REOPENED>DEPUTY_REVIEW", "REOPENED>CLOSED",
+      "INTAKE_REVIEW>IN_PROGRESS", "INTAKE_REVIEW>CLOSED",
       "NEW>ASSIGNED",
       "SCREENING>ASSIGNED",
       "ADMIN_REVIEW>DIRECTOR_REVIEW",
@@ -159,6 +168,9 @@ function availableStatusEntries(current: string, role: string) {
       "RESOLVED>CLOSED",
       "REOPENED>ASSIGNED",
     ],
+    STUDENT_AFFAIRS: ["AFFAIRS_REVIEW>IN_PROGRESS", "AFFAIRS_REVIEW>INTAKE_REVIEW", "IN_PROGRESS>INTAKE_REVIEW"],
+    LEVEL_HEAD: ["IN_PROGRESS>INTAKE_REVIEW"],
+    TEACHER: ["IN_PROGRESS>INTAKE_REVIEW"],
     CASE_OFFICER: [
       "ASSIGNED>IN_PROGRESS",
       "IN_PROGRESS>ADMIN_REVIEW",
@@ -181,13 +193,16 @@ function availableStatusEntries(current: string, role: string) {
 }
 
 function CaseWorkflowProgress({ status }: { status: string }) {
-  const steps = ["รับเรื่อง", "คัดกรอง", "ดำเนินการ", "ตรวจผล", "ปิดเคส"];
+  const steps = ["รับเรื่อง", "กิจการ/ฝ่ายบริหาร", "ครูดำเนินการ", "เจ้าหน้าที่ตรวจผล", "ปิดเคส"];
   const stageByStatus: Record<string, number> = {
     NEW: 0,
+    AFFAIRS_REVIEW: 1,
+    DEPUTY_REVIEW: 1,
     SCREENING: 1,
     REOPENED: 1,
     ASSIGNED: 2,
     IN_PROGRESS: 2,
+    INTAKE_REVIEW: 3,
     DIRECTOR_ORDERED: 2,
     ADMIN_REVIEW: 3,
     DIRECTOR_REVIEW: 3,
@@ -1439,6 +1454,50 @@ function AssigneeCombobox({
   );
 }
 
+function TeamAssigneePicker({
+  selected,
+  lead,
+  disabled,
+  onChange,
+}: {
+  selected: string[];
+  lead: string;
+  disabled: boolean;
+  onChange: (selected: string[], lead: string) => void;
+}) {
+  type Assignee = { username: string; display_name: string; role: string };
+  const [items, setItems] = useState<Assignee[]>([]);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    fetch("/api/cases/assignees")
+      .then(async (response) => {
+        const data = await readJson<{ assignees?: Assignee[]; error?: string }>(response);
+        if (!response.ok) throw new Error(data.error);
+        setItems(data.assignees ?? []);
+      })
+      .catch(() => setError("โหลดรายชื่อครูไม่สำเร็จ กดรีเฟรชแล้วลองอีกครั้ง"));
+  }, []);
+  const roleLabels: Record<string, string> = { STUDENT_AFFAIRS: "ครูกิจการนักเรียน", LEVEL_HEAD: "หัวหน้าระดับ", ADVISOR: "ครูที่ปรึกษา", TEACHER: "ครูผู้ดำเนินการ", CASE_OFFICER: "ผู้รับผิดชอบเดิม" };
+  const filtered = items.filter((item) => `${item.display_name} ${item.username} ${roleLabels[item.role] ?? item.role}`.toLocaleLowerCase("th-TH").includes(query.trim().toLocaleLowerCase("th-TH"))).slice(0, 20);
+  function toggle(username: string) {
+    const next = selected.includes(username) ? selected.filter((value) => value !== username) : [...selected, username];
+    const nextLead = next.length === 0 ? "" : next.includes(lead) ? lead : next[0];
+    onChange(next, nextLead);
+  }
+  return <div className="team-assignee-picker">
+    <div className="assignee-input-wrap"><FontAwesomeIcon icon={faMagnifyingGlass} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ค้นหาหัวหน้าระดับ ครูที่ปรึกษา หรือครูคนอื่น" disabled={disabled} /></div>
+    {error ? <p className="assignee-error">{error}</p> : <div className="team-assignee-options">{filtered.map((item) => {
+      const checked = selected.includes(item.username);
+      return <div className={checked ? "selected" : ""} key={item.username}>
+        <button type="button" onClick={() => toggle(item.username)} disabled={disabled} aria-pressed={checked}><FontAwesomeIcon icon={checked ? faCheckCircle : faPlus} /><span><b>{item.display_name}</b><small>{roleLabels[item.role] ?? item.role} · @{item.username}</small></span></button>
+        {checked && <label><input type="radio" name="lead-assignee" checked={lead === item.username} onChange={() => onChange(selected, item.username)} /> ผู้รับผิดชอบหลัก</label>}
+      </div>;
+    })}</div>}
+    <small className="field-help">เลือกได้หลายคน และกำหนดผู้รับผิดชอบหลักหนึ่งคน</small>
+  </div>;
+}
+
 function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1456,6 +1515,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [currentRole, setCurrentRole] = useState("");
+  const [currentRoles, setCurrentRoles] = useState<string[]>([]);
   const [currentUsername, setCurrentUsername] = useState("");
   const [currentDisplayName, setCurrentDisplayName] = useState("");
   const [transitionTarget, setTransitionTarget] = useState("");
@@ -1466,6 +1526,8 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState("");
   const [pendingAssignee, setPendingAssignee] = useState("");
   const [pendingAssigneeName, setPendingAssigneeName] = useState("");
+  const [pendingTeam, setPendingTeam] = useState<string[]>([]);
+  const [leadAssignee, setLeadAssignee] = useState("");
   async function loadCases() {
     setLoading(true);
     setError("");
@@ -1521,11 +1583,12 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       .then(
         async (response) =>
           (await response.json()) as {
-            user?: { role?: string; username?: string; displayName?: string };
+            user?: { role?: string; roles?: string[]; username?: string; displayName?: string };
           },
       )
       .then((data) => {
         setCurrentRole(data.user?.role ?? "");
+        setCurrentRoles(data.user?.roles ?? (data.user?.role ? [data.user.role] : []));
         setCurrentUsername(data.user?.username ?? "");
         setCurrentDisplayName(
           data.user?.displayName ?? data.user?.username ?? "ผู้ดูแลระบบ",
@@ -1546,12 +1609,14 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       setPendingAssigneeName(
         String(data.case.assigned_name ?? data.case.assigned_to ?? ""),
       );
+      setPendingTeam((data.assignments ?? []).map((item) => item.username));
+      setLeadAssignee((data.assignments ?? []).find((item) => item.assignment_role === "LEAD")?.username ?? String(data.case.assigned_to ?? ""));
       setSelected(data);
-    } catch {
-      notify("ไม่สามารถโหลดรายละเอียดเคสได้");
+    } catch (error) {
+      notify(error instanceof Error && error.message ? error.message : "ไม่สามารถโหลดรายละเอียดเคสได้");
     }
   }
-  async function updateCase(payload: Record<string, string>) {
+  async function updateCase(payload: Record<string, unknown>) {
     if (!selected) return;
     setSaving(true);
     try {
@@ -1614,14 +1679,15 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
           ? cases.filter((item) => ["RESOLVED", "CLOSED"].includes(item.status))
           : cases;
   const selectedStatus = String(selected?.case.status ?? "");
+  const hasRole = (role: string) => currentRole === "SUPER_ADMIN" || currentRoles.includes("SUPER_ADMIN") || currentRole === role || currentRoles.includes(role);
   const isCurrentAssignee = Boolean(
     selected && currentUsername && String(selected.case.assigned_to ?? "") === currentUsername,
   );
+  const isTeamMember = Boolean(selected?.assignments?.some((item) => item.username === currentUsername));
   const canChooseAssignee = Boolean(
     selected &&
-    ((["NEW", "REOPENED", "SCREENING"].includes(selectedStatus) && ["SUPER_ADMIN", "INTAKE"].includes(currentRole)) ||
-      (selectedStatus === "IN_PROGRESS" &&
-        (["SUPER_ADMIN", "INTAKE"].includes(currentRole) || isCurrentAssignee))),
+    selectedStatus === "SCREENING" &&
+    (hasRole("SUPER_ADMIN") || hasRole("INTAKE")),
   );
   const groupedVisibleCases = statusGroups
     .map((group) => ({ ...group, cases: visibleCases.filter((item) => group.statuses.includes(item.status)) }))
@@ -1998,6 +2064,14 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   }
                 />
               </div>
+              {selected.assignments?.length > 0 && (
+                <div className="note-card case-team-card">
+                  <h4 className="section-title"><FontAwesomeIcon icon={faPeopleGroup} /> ทีมผู้ดำเนินการ</h4>
+                  <div className="case-team-list">{selected.assignments.map((assignment) => (
+                    <div key={assignment.id}><span><b>{assignment.display_name}</b><small>@{assignment.username}</small></span><em>{assignment.assignment_role === "LEAD" ? "ผู้รับผิดชอบหลัก" : "ผู้ร่วมดำเนินการ"}</em></div>
+                  ))}</div>
+                </div>
+              )}
               <div className="note-card">
                 <h4 className="section-title">
                   <FontAwesomeIcon icon={faFileArrowUp} />
@@ -2053,9 +2127,12 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <b>
                         {{
                           NEW: "คัดกรองและมอบหมายผู้รับผิดชอบ",
+                          AFFAIRS_REVIEW: "ทีมกิจการพิจารณาและเลือกทีมครู",
+                          DEPUTY_REVIEW: "รองผู้อำนวยการพิจารณา",
                           SCREENING: "เลือกผู้รับผิดชอบแล้วส่งต่อ",
                           ASSIGNED: "เริ่มดำเนินการเคส",
                           IN_PROGRESS: "ส่งผลการดำเนินงานให้แอดมินตรวจ",
+                          INTAKE_REVIEW: "เจ้าหน้าที่ตรวจผลและปิดเคส",
                           ADMIN_REVIEW: "ตรวจผลแล้วปิดเคส หรือเสนอผู้อำนวยการ",
                           DIRECTOR_ORDERED: "รับคำสั่งผู้อำนวยการและดำเนินการต่อ",
                           PENDING_CLOSE: "ยืนยันปิดเคส",
@@ -2089,9 +2166,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   <select
                     value={selected.case.severity}
                     onChange={(e) => updateCase({ severity: e.target.value })}
-                    disabled={
-                      saving || !["SUPER_ADMIN", "INTAKE"].includes(currentRole)
-                    }
+                    disabled={saving || !(hasRole("SUPER_ADMIN") || hasRole("INTAKE"))}
                   >
                     {Object.entries(severityLabels).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -2100,15 +2175,43 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     ))}
                   </select>
                 </label>
+                {["NEW", "REOPENED"].includes(String(selected.case.status)) && (hasRole("INTAKE") || hasRole("SUPER_ADMIN")) && (
+                  <div className="workflow-decision-actions intake-routing-actions">
+                    {!['SEVERE', 'CRITICAL'].includes(String(selected.case.severity)) && <button type="button" className="button primary" disabled={saving} onClick={() => setTransitionTarget("AFFAIRS_REVIEW")}><FontAwesomeIcon icon={faPeopleGroup} /> ส่งทีมกิจการนักเรียน</button>}
+                    <button type="button" className={['SEVERE', 'CRITICAL'].includes(String(selected.case.severity)) ? "button primary" : "button secondary"} disabled={saving} onClick={() => setTransitionTarget("DEPUTY_REVIEW")}><FontAwesomeIcon icon={faShieldHalved} /> ส่งรองผู้อำนวยการ</button>
+                    <button type="button" className="button secondary close-case-button" disabled={saving} onClick={() => setTransitionTarget("CLOSED")}><FontAwesomeIcon icon={faCheckCircle} /> พิจารณาแล้ว ปิดเคส</button>
+                  </div>
+                )}
+                {selected.case.status === "AFFAIRS_REVIEW" && (hasRole("STUDENT_AFFAIRS") || hasRole("SUPER_ADMIN")) && (
+                  <div className="affairs-review-panel">
+                    <h5><FontAwesomeIcon icon={faPeopleGroup} /> เลือกทีมผู้ดำเนินการ</h5>
+                    <TeamAssigneePicker selected={pendingTeam} lead={leadAssignee} disabled={saving} onChange={(team, lead) => { setPendingTeam(team); setLeadAssignee(lead); }} />
+                    <div className="workflow-decision-actions">
+                      <button type="button" className="button primary" disabled={saving || pendingTeam.length === 0 || !leadAssignee} onClick={() => setTransitionTarget("IN_PROGRESS")}><FontAwesomeIcon icon={faPaperPlane} /> อนุมัติและมอบหมาย</button>
+                      <button type="button" className="button secondary" disabled={saving} onClick={() => setTransitionTarget("INTAKE_REVIEW")}><FontAwesomeIcon icon={faRotate} /> ไม่อนุมัติ ส่งกลับเจ้าหน้าที่</button>
+                    </div>
+                  </div>
+                )}
+                {selected.case.status === "IN_PROGRESS" && isCurrentAssignee && (
+                  <button type="button" className="button primary wide workflow-submit" disabled={saving} onClick={() => setTransitionTarget("INTAKE_REVIEW")}><FontAwesomeIcon icon={faCheck} /> ทีมดำเนินการเรียบร้อย ส่งผลกลับเจ้าหน้าที่</button>
+                )}
+                {selected.case.status === "IN_PROGRESS" && isTeamMember && !isCurrentAssignee && (
+                  <div className="workflow-waiting"><FontAwesomeIcon icon={faClock} /><span><small>คุณเป็นผู้ร่วมดำเนินการ</small><b>เพิ่มบันทึกผลได้ ผู้รับผิดชอบหลักเป็นผู้ส่งผลกลับเจ้าหน้าที่</b></span></div>
+                )}
+                {selected.case.status === "INTAKE_REVIEW" && (hasRole("INTAKE") || hasRole("SUPER_ADMIN")) && (
+                  <div className="workflow-decision-actions">
+                    <button type="button" className="button primary" disabled={saving} onClick={() => setTransitionTarget("CLOSED")}><FontAwesomeIcon icon={faCheckCircle} /> ตรวจผลแล้ว ปิดเคส</button>
+                    {selected.assignments?.length > 0 && <button type="button" className="button secondary" disabled={saving} onClick={() => setTransitionTarget("IN_PROGRESS")}><FontAwesomeIcon icon={faRotate} /> ส่งกลับทีมเดิมดำเนินการต่อ</button>}
+                  </div>
+                )}
+                {["DEPUTY_REVIEW", "DIRECTOR_REVIEW"].includes(String(selected.case.status)) && (
+                  <div className="workflow-waiting"><FontAwesomeIcon icon={faClock} /><span><small>อยู่ระหว่างการพิจารณา</small><b>{selected.case.status === "DEPUTY_REVIEW" ? "รอรองผู้อำนวยการดำเนินการในพอร์ทัลฝ่ายบริหาร" : "รอผู้อำนวยการดำเนินการในพอร์ทัลฝ่ายบริหาร"}</b></span></div>
+                )}
                 {canChooseAssignee && (
                   <label className="assignee-field">
                     <span>
                       <FontAwesomeIcon icon={faUserShield} />
-                      {["NEW", "REOPENED", "SCREENING"].includes(String(selected.case.status))
-                        ? "1. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ"
-                        : isCurrentAssignee && !["SUPER_ADMIN", "INTAKE"].includes(currentRole)
-                          ? "ส่งต่อเคสให้ผู้รับผิดชอบคนใหม่"
-                          : "ผู้รับผิดชอบเคส"}
+                      1. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ (เคสเดิม)
                     </span>
                     <AssigneeCombobox
                       key={String(selected.case.assigned_to ?? "unassigned")}
@@ -2121,7 +2224,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     />
                   </label>
                 )}
-                {["NEW", "REOPENED", "SCREENING"].includes(String(selected.case.status)) &&
+                {selected.case.status === "SCREENING" &&
                   ["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
                     <>
                       <button
@@ -2152,19 +2255,6 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       )}
                     </>
                 )}
-                {!['NEW', 'REOPENED', 'SCREENING'].includes(String(selected.case.status)) &&
-                  canChooseAssignee &&
-                  pendingAssignee &&
-                  pendingAssignee !== String(selected.case.assigned_to ?? "") && (
-                    <button
-                      type="button"
-                      className="button secondary wide workflow-submit"
-                      disabled={saving}
-                      onClick={() => setReassignmentOpen(true)}
-                    >
-                      <FontAwesomeIcon icon={faPaperPlane} /> ส่งต่อเคสให้ {pendingAssigneeName}
-                    </button>
-                  )}
                 {selected.case.status === "ASSIGNED" &&
                   availableStatusEntries("ASSIGNED", currentRole).some(
                     ([value]) => value === "IN_PROGRESS",
@@ -2178,30 +2268,6 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <FontAwesomeIcon icon={faArrowRight} /> เริ่มดำเนินการเคส
                     </button>
                   )}
-                {selected.case.status === "IN_PROGRESS" &&
-                  availableStatusEntries("IN_PROGRESS", currentRole).some(
-                    ([value]) => value === "ADMIN_REVIEW",
-                  ) && (
-                    <button
-                      type="button"
-                      className="button primary wide workflow-submit"
-                      disabled={saving}
-                      onClick={() => setTransitionTarget("ADMIN_REVIEW")}
-                    >
-                      <FontAwesomeIcon icon={faCheck} /> ดำเนินการเสร็จแล้ว
-                      ส่งผลให้แอดมินตรวจ
-                    </button>
-                  )}
-                {selected.case.status === "IN_PROGRESS" && isCurrentAssignee && (
-                  <button
-                    type="button"
-                    className="button secondary wide workflow-submit close-case-button"
-                    disabled={saving}
-                    onClick={() => setTransitionTarget("CLOSED")}
-                  >
-                    <FontAwesomeIcon icon={faCheckCircle} /> ปิดเคสของฉัน
-                  </button>
-                )}
                 {selected.case.status === "DIRECTOR_ORDERED" &&
                   availableStatusEntries("DIRECTOR_ORDERED", currentRole).some(
                     ([value]) => value === "IN_PROGRESS",
@@ -2617,7 +2683,9 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
           }
           toLabel={statusLabels[transitionTarget] ?? transitionTarget}
           recipientLabel={
-            transitionTarget === "ASSIGNED" ? pendingAssigneeName : undefined
+            transitionTarget === "IN_PROGRESS" && selected.case.status === "AFFAIRS_REVIEW"
+              ? `ทีมผู้ดำเนินการ ${pendingTeam.length} คน`
+              : transitionTarget === "ASSIGNED" ? pendingAssigneeName : undefined
           }
           closing={transitionTarget === "CLOSED"}
           saving={saving}
@@ -2628,6 +2696,9 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               ...(handoffReason.trim() ? { handoffReason } : {}),
               ...(transitionTarget === "ASSIGNED" && pendingAssignee
                 ? { assignedTo: pendingAssignee }
+                : {}),
+              ...(transitionTarget === "IN_PROGRESS" && selected.case.status === "AFFAIRS_REVIEW"
+                ? { assignees: pendingTeam, leadAssignee }
                 : {}),
               ...(dueDate ? { dueDate } : {}),
             })

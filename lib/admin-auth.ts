@@ -5,10 +5,10 @@ import { verifyPassword } from "./password";
 const COOKIE_NAME = "redbox_admin_session";
 const SESSION_AGE_SECONDS = 8 * 60 * 60;
 
-export type StaffRole = "SUPER_ADMIN" | "INTAKE" | "CASE_OFFICER" | "ADVISOR" | "DIRECTOR";
+export type StaffRole = "SUPER_ADMIN" | "INTAKE" | "STUDENT_AFFAIRS" | "LEVEL_HEAD" | "TEACHER" | "ADVISOR" | "DEPUTY_DIRECTOR" | "DIRECTOR" | "CASE_OFFICER";
 export type SessionPayload = { userId: string; username: string; displayName: string; role: StaffRole; roles: StaffRole[]; advisorId?: string | null; mustChangePassword?: boolean; exp: number };
 
-const rolePriority: StaffRole[] = ["SUPER_ADMIN", "INTAKE", "CASE_OFFICER", "ADVISOR", "DIRECTOR"];
+const rolePriority: StaffRole[] = ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "DEPUTY_DIRECTOR", "LEVEL_HEAD", "TEACHER", "ADVISOR", "DIRECTOR", "CASE_OFFICER"];
 
 function normalizeRoles(values: string[], legacyRole?: string): StaffRole[] {
   const allowed = new Set<StaffRole>(rolePriority);
@@ -19,8 +19,8 @@ function normalizeRoles(values: string[], legacyRole?: string): StaffRole[] {
 
 function effectiveRole(roles: StaffRole[], requestedPortal: "ADMIN" | "DIRECTOR"): StaffRole | null {
   if (roles.includes("SUPER_ADMIN")) return "SUPER_ADMIN";
-  if (requestedPortal === "DIRECTOR") return roles.includes("DIRECTOR") ? "DIRECTOR" : null;
-  return rolePriority.find((role) => role !== "DIRECTOR" && roles.includes(role)) ?? null;
+  if (requestedPortal === "DIRECTOR") return roles.includes("DEPUTY_DIRECTOR") ? "DEPUTY_DIRECTOR" : roles.includes("DIRECTOR") ? "DIRECTOR" : null;
+  return rolePriority.find((role) => !["DIRECTOR", "DEPUTY_DIRECTOR"].includes(role) && roles.includes(role)) ?? null;
 }
 
 export function sessionHasRole(session: Pick<SessionPayload, "role" | "roles">, role: StaffRole) {
@@ -106,7 +106,7 @@ export async function getAdminSession(request: Request): Promise<SessionPayload 
   if (!payload || !signature || !(await safeEqual(signature, await hmac(payload)))) return null;
   try {
     const parsed = JSON.parse(base64UrlToText(payload)) as SessionPayload;
-    const valid = parsed.exp > Date.now() && parsed.username && ["SUPER_ADMIN", "INTAKE", "CASE_OFFICER", "ADVISOR", "DIRECTOR"].includes(parsed.role);
+    const valid = parsed.exp > Date.now() && parsed.username && rolePriority.includes(parsed.role);
     if (!valid) return null;
     const db = await ensureDatabase();
     const active = await db.prepare("SELECT id,role,advisor_id,must_change_password FROM staff_users WHERE id=? AND is_active=1").bind(parsed.userId).first<{ id: string; role: string; advisor_id: string | null; must_change_password: number }>();
@@ -131,21 +131,21 @@ export async function requireAdmin(request: Request) {
 
 export async function requireCaseStaff(request: Request) {
   const session = await getAdminSession(request);
-  if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE", "CASE_OFFICER"])) throw new Response("Forbidden", { status: session ? 403 : 401 });
+  if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "ADVISOR", "CASE_OFFICER"])) throw new Response("Forbidden", { status: session ? 403 : 401 });
   if (session.mustChangePassword) throw new Response("Password change required", { status: 428 });
   return session.username;
 }
 
 export async function requireCaseSession(request: Request) {
   const session = await getAdminSession(request);
-  if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE", "CASE_OFFICER", "ADVISOR"])) throw new Response("Forbidden", { status: session ? 403 : 401 });
+  if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "ADVISOR", "CASE_OFFICER"])) throw new Response("Forbidden", { status: session ? 403 : 401 });
   if (session.mustChangePassword) throw new Response("Password change required", { status: 428 });
   return session;
 }
 
 export async function requireDirector(request: Request) {
   const session = await getAdminSession(request);
-  if (!session || !sessionHasAnyRole(session, ["DIRECTOR", "SUPER_ADMIN"])) throw new Response("Unauthorized", { status: 401 });
+  if (!session || !sessionHasAnyRole(session, ["DEPUTY_DIRECTOR", "DIRECTOR", "SUPER_ADMIN"])) throw new Response("Unauthorized", { status: 401 });
   if (session.mustChangePassword) throw new Response("Password change required", { status: 428 });
   return session.username;
 }

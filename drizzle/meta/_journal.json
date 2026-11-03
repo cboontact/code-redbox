@@ -50,6 +50,13 @@
       "when": 1789474262315,
       "tag": "0006_lyrical_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793671200000,
+      "tag": "0007_student_affairs_workflow",
+      "breakpoints": true
     }
   ]
 }

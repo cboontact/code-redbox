@@ -24,6 +24,11 @@ const statements = [
     created_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS staff_user_roles (
+    user_id TEXT NOT NULL REFERENCES staff_users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(user_id,role)
+  )`,
   `CREATE TABLE IF NOT EXISTS advisors (
     id TEXT PRIMARY KEY, prefix TEXT NOT NULL, first_name TEXT NOT NULL,
     last_name TEXT NOT NULL, email TEXT, phone TEXT,
@@ -47,7 +52,7 @@ const statements = [
     requires_immediate_review INTEGER NOT NULL DEFAULT 0,
     tracking_password_hash TEXT,
     upload_token_hash TEXT, upload_token_expires_at TEXT,
-    severity TEXT NOT NULL DEFAULT 'GENERAL', status TEXT NOT NULL DEFAULT 'NEW',
+    severity TEXT NOT NULL DEFAULT 'WATCH', status TEXT NOT NULL DEFAULT 'NEW',
     assigned_to TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
@@ -69,6 +74,15 @@ const statements = [
     from_status TEXT NOT NULL, to_status TEXT NOT NULL, from_username TEXT NOT NULL,
     to_username TEXT, reason TEXT NOT NULL, due_date TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS case_assignments (
+    id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES staff_users(id), username TEXT NOT NULL,
+    assignment_role TEXT NOT NULL DEFAULT 'MEMBER',
+    status TEXT NOT NULL DEFAULT 'ASSIGNED', assigned_by TEXT NOT NULL,
+    completed_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(case_id,user_id)
   )`,
   `CREATE TABLE IF NOT EXISTS director_actions (
     id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(id),
@@ -94,6 +108,8 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS idx_director_actions_case_created ON director_actions(case_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_advisor_assignments_advisor ON advisor_assignments(advisor_id)`,
   `CREATE INDEX IF NOT EXISTS idx_staff_users_role_active ON staff_users(role,is_active)`,
+  `CREATE INDEX IF NOT EXISTS idx_staff_user_roles_role ON staff_user_roles(role,user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_case_assignments_user_status ON case_assignments(username,status)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS advisor_assignment_advisor_room_unique
    ON advisor_assignments(advisor_id,level,classroom)`,
 ];
@@ -153,6 +169,10 @@ export async function ensureDatabase() {
   if (!caseColumns.results.some((column) => column.name === "tracking_password_hash")) {
     await env.DB.prepare("ALTER TABLE cases ADD COLUMN tracking_password_hash TEXT").run();
   }
+  await env.DB.prepare(`UPDATE cases SET severity=CASE severity
+    WHEN 'GENERAL' THEN 'WATCH' WHEN 'CONCERN' THEN 'MODERATE'
+    WHEN 'SERIOUS' THEN 'SEVERE' ELSE severity END
+    WHERE severity IN ('GENERAL','CONCERN','SERIOUS')`).run();
   await env.DB.batch(
     categorySeeds.map((row) =>
       env.DB.prepare(

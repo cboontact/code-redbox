@@ -4,15 +4,18 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCircleCheck, faCircleExclamation, faFloppyDisk, faKey, faLink, faLock, faMagnifyingGlass, faPen, faPlus, faShieldHalved, faUserCheck, faUserSlash, faUserTie, faUsersGear, faXmark } from "@fortawesome/free-solid-svg-icons";
 
-type Role = "SUPER_ADMIN" | "INTAKE" | "CASE_OFFICER" | "ADVISOR" | "DIRECTOR";
+type Role = "SUPER_ADMIN" | "INTAKE" | "STUDENT_AFFAIRS" | "LEVEL_HEAD" | "TEACHER" | "ADVISOR" | "DEPUTY_DIRECTOR" | "DIRECTOR";
 type StaffUser = { id: string; username: string; display_name: string; role: Role; roles: Role[]; advisor_id: string | null; advisor_name: string | null; is_active: number; created_at: string };
 type Advisor = { id: string; prefix: string; first_name: string; last_name: string; source_username?: string | null; account_user_id?: string | null; account_username?: string | null };
 
 const roles: Array<{ value: Role; label: string; detail: string }> = [
   { value: "SUPER_ADMIN", label: "แอดมินระบบ", detail: "ควบคุมทุกส่วนและจัดการผู้ใช้งาน" },
-  { value: "INTAKE", label: "เจ้าหน้าที่รับเรื่อง", detail: "คัดกรอง มอบหมาย และส่งต่อเคส" },
-  { value: "CASE_OFFICER", label: "ผู้รับผิดชอบเคส", detail: "ดำเนินการเฉพาะเคสที่รับผิดชอบ" },
+  { value: "INTAKE", label: "เจ้าหน้าที่รับเรื่อง", detail: "คัดกรอง ส่งทีมกิจการ ตรวจผล และปิดเคส" },
+  { value: "STUDENT_AFFAIRS", label: "ครูกิจการนักเรียน", detail: "พิจารณาอนุมัติและมอบหมายทีมครู" },
+  { value: "LEVEL_HEAD", label: "หัวหน้าระดับ", detail: "รับมอบหมายและร่วมดำเนินการเคส" },
+  { value: "TEACHER", label: "ครูผู้ดำเนินการ", detail: "รับมอบหมายและบันทึกผลการดำเนินงาน" },
   { value: "ADVISOR", label: "ครูที่ปรึกษา", detail: "ดูเคสของนักเรียนในห้องที่ได้รับสิทธิ์" },
+  { value: "DEPUTY_DIRECTOR", label: "รองผู้อำนวยการ", detail: "พิจารณาเคสรุนแรงหรือวิกฤต" },
   { value: "DIRECTOR", label: "ผู้อำนวยการ", detail: "พิจารณาเฉพาะเคสที่เสนอขึ้นมา" },
 ];
 
@@ -132,7 +135,7 @@ export function AdminUsers() {
         <label><span>ชื่อที่แสดง</span><input autoFocus value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} placeholder="ชื่อบุคลากรหรือชื่องาน" required /></label>
         <label><span>Username</span><input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} placeholder="ชื่อสำหรับเข้าสู่ระบบ" disabled={Boolean(editing)} required /></label>
         <label><span>{editing ? "ตั้งรหัสผ่านใหม่" : "รหัสผ่าน"}</span><input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={editing ? "เว้นว่างหากไม่เปลี่ยน" : "อย่างน้อย 8 ตัวอักษร"} minLength={8} required={!editing} /></label>
-        <fieldset className="role-picker"><legend>กำหนดบทบาท <small>เลือกได้หลายรายการ</small></legend><div>{roles.map((role) => { const selected = form.roles.includes(role.value); return <button type="button" key={role.value} className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => toggleRole(role.value)}><span><FontAwesomeIcon icon={role.value === "SUPER_ADMIN" ? faShieldHalved : role.value === "DIRECTOR" ? faUserTie : role.value === "ADVISOR" ? faLink : role.value === "CASE_OFFICER" ? faUserCheck : faKey} /></span><div><b>{role.label}</b><small>{role.detail}</small></div>{selected && <FontAwesomeIcon className="role-selected-check" icon={faCircleCheck} />}</button>; })}</div></fieldset>
+        <fieldset className="role-picker"><legend>กำหนดบทบาท <small>เลือกได้หลายรายการ</small></legend><div>{roles.map((role) => { const selected = form.roles.includes(role.value); return <button type="button" key={role.value} className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => toggleRole(role.value)}><span><FontAwesomeIcon icon={role.value === "SUPER_ADMIN" ? faShieldHalved : ["DIRECTOR", "DEPUTY_DIRECTOR"].includes(role.value) ? faUserTie : role.value === "ADVISOR" ? faLink : ["LEVEL_HEAD", "TEACHER", "STUDENT_AFFAIRS"].includes(role.value) ? faUserCheck : faKey} /></span><div><b>{role.label}</b><small>{role.detail}</small></div>{selected && <FontAwesomeIcon className="role-selected-check" icon={faCircleCheck} />}</button>; })}</div></fieldset>
         {form.roles.includes("ADVISOR") && <label className="advisor-account-link"><span>เชื่อมกับข้อมูลครูที่ปรึกษา</span><select value={form.advisorId} onChange={(event) => { const advisor = advisors.find((item) => item.id === event.target.value); setForm({ ...form, advisorId: event.target.value, ...(!editing && advisor ? { displayName: `${advisor.prefix}${advisor.first_name} ${advisor.last_name}`, username: form.username || advisor.source_username || "" } : {}) }); }} required><option value="">เลือกครูที่ยังไม่มีบัญชี</option>{selectableAdvisors.map((advisor) => <option key={advisor.id} value={advisor.id}>{advisor.prefix}{advisor.first_name} {advisor.last_name}{advisor.account_username ? ` · @${advisor.account_username}` : ""}</option>)}</select><small className="field-help">เชื่อมครูหนึ่งครั้ง แล้วเพิ่มบทบาทอื่นในบัญชีเดียวกันได้</small></label>}
         {editing && roleNames(editing.roles) !== roleNames(form.roles) && <div className="role-change-notice"><FontAwesomeIcon icon={faCircleExclamation} /><span><b>กำลังปรับบทบาทของบัญชี</b><small>{roleNames(editing.roles)} → {roleNames(form.roles)}</small></span></div>}
         {form.roles.includes("SUPER_ADMIN") && <div className="role-warning"><FontAwesomeIcon icon={faShieldHalved} /><span><b>สิทธิ์ระดับสูงสุด</b><small>บทบาทนี้ครอบคลุมทุกส่วน รวมถึงจัดการผู้ใช้ ลบเคส และเปลี่ยนสิทธิ์</small></span></div>}

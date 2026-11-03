@@ -22,7 +22,8 @@ export async function POST(request: Request) {
       { success: true, role: user.role },
       { headers: { "set-cookie": sessionCookie(token, request), "cache-control": "no-store" } },
     );
-  } catch {
+  } catch (error) {
+    console.error("Authentication service failed", error);
     return jsonError("ไม่สามารถเข้าสู่ระบบได้ กรุณาลองอีกครั้ง", 500);
   }
 }

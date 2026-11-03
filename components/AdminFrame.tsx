@@ -10,8 +10,9 @@ import { faChartLine, faCircleCheck, faCircleExclamation, faFloppyDisk, faKey, f
 type CurrentUser = { username: string; displayName: string; role: string; roles?: string[]; mustChangePassword?: boolean };
 
 const roleLabels: Record<string, string> = {
-  SUPER_ADMIN: "แอดมินระบบ", INTAKE: "เจ้าหน้าที่รับเรื่อง", CASE_OFFICER: "ผู้รับผิดชอบเคส",
-  ADVISOR: "ครูที่ปรึกษา", DIRECTOR: "ผู้อำนวยการ",
+  SUPER_ADMIN: "แอดมินระบบ", INTAKE: "เจ้าหน้าที่รับเรื่อง", STUDENT_AFFAIRS: "ครูกิจการนักเรียน",
+  LEVEL_HEAD: "หัวหน้าระดับ", TEACHER: "ครูผู้ดำเนินการ", ADVISOR: "ครูที่ปรึกษา",
+  DEPUTY_DIRECTOR: "รองผู้อำนวยการ", DIRECTOR: "ผู้อำนวยการ", CASE_OFFICER: "ผู้รับผิดชอบเคส (เดิม)",
 };
 
 const menu = [

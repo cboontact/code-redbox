@@ -43,12 +43,18 @@ export async function GET(request: Request) {
     const preview = url.searchParams.get("preview") === "1";
     if (!key) return jsonError("ไม่พบไฟล์", 404);
     const db = await ensureDatabase();
-    const attachment = await db.prepare(`SELECT ca.storage_key,c.assigned_to,c.status,s.level,s.classroom
+    const attachment = await db.prepare(`SELECT ca.storage_key,ca.case_id,c.assigned_to,c.status,s.level,s.classroom
       FROM case_attachments ca JOIN cases c ON c.id=ca.case_id JOIN students s ON s.id=c.student_id
-      WHERE ca.storage_key=?`).bind(key).first<{ storage_key: string; assigned_to: string | null; status: string; level: string; classroom: string }>();
+      WHERE ca.storage_key=?`).bind(key).first<{ storage_key: string; case_id: string; assigned_to: string | null; status: string; level: string; classroom: string }>();
     if (!attachment) return jsonError("ไม่พบไฟล์", 404);
     let allowed = sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE"]);
-    if (sessionHasAnyRole(session, ["CASE_OFFICER", "ADVISOR"]) && attachment.assigned_to === session.username) allowed = true;
+    if (sessionHasAnyRole(session, ["STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "CASE_OFFICER", "ADVISOR"]) && attachment.assigned_to === session.username) allowed = true;
+    if (sessionHasRole(session, "STUDENT_AFFAIRS") && attachment.status === "AFFAIRS_REVIEW") allowed = true;
+    if (sessionHasAnyRole(session, ["STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "CASE_OFFICER", "ADVISOR"])) {
+      const assignment = await db.prepare("SELECT id FROM case_assignments WHERE case_id=? AND username=? LIMIT 1").bind(attachment.case_id, session.username).first();
+      allowed ||= Boolean(assignment);
+    }
+    if (sessionHasRole(session, "DEPUTY_DIRECTOR") && attachment.status === "DEPUTY_REVIEW") allowed = true;
     if (sessionHasRole(session, "DIRECTOR") && attachment.status === "DIRECTOR_REVIEW") allowed = true;
     if (sessionHasRole(session, "ADVISOR") && session.advisorId) {
       const room = await db.prepare("SELECT id FROM advisor_assignments WHERE advisor_id=? AND level=? AND classroom=?")

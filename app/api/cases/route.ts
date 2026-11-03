@@ -10,13 +10,13 @@ const SAFE_CASE_COLUMNS = `c.id,c.case_number,c.student_id,c.category_id,c.title
   c.requires_immediate_review,c.severity,c.status,c.assigned_to,c.created_at,c.updated_at`;
 
 const STAFF_CASE_ORDER = `CASE
-  WHEN c.status IN ('NEW','REOPENED','SCREENING','ASSIGNED') THEN 0
-  WHEN c.status IN ('IN_PROGRESS','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE') THEN 1
+  WHEN c.status IN ('NEW','REOPENED','SCREENING','ASSIGNED','AFFAIRS_REVIEW','DEPUTY_REVIEW') THEN 0
+  WHEN c.status IN ('IN_PROGRESS','INTAKE_REVIEW','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE') THEN 1
   WHEN c.status IN ('RESOLVED','CLOSED') THEN 2
   ELSE 1 END,
   CASE c.status
-    WHEN 'NEW' THEN 0 WHEN 'REOPENED' THEN 1 WHEN 'SCREENING' THEN 2 WHEN 'ASSIGNED' THEN 3
-    WHEN 'IN_PROGRESS' THEN 4 WHEN 'ADMIN_REVIEW' THEN 5 WHEN 'DIRECTOR_REVIEW' THEN 6
+    WHEN 'NEW' THEN 0 WHEN 'REOPENED' THEN 1 WHEN 'AFFAIRS_REVIEW' THEN 2 WHEN 'DEPUTY_REVIEW' THEN 3
+    WHEN 'IN_PROGRESS' THEN 4 WHEN 'INTAKE_REVIEW' THEN 5 WHEN 'ADMIN_REVIEW' THEN 5 WHEN 'DIRECTOR_REVIEW' THEN 6
     WHEN 'DIRECTOR_ORDERED' THEN 7 WHEN 'PENDING_CLOSE' THEN 8 WHEN 'RESOLVED' THEN 9
     WHEN 'CLOSED' THEN 10 ELSE 11 END,
   c.requires_immediate_review DESC,c.created_at DESC`;
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
         id, caseNumber, input.data.studentId, input.data.categoryId, input.data.title,
         input.data.description, input.data.location, input.data.peopleInvolved,
         input.data.requestedHelp, input.data.safetyLevel, input.data.isAnonymous ? 1 : 0,
-        immediate, immediate ? "CONCERN" : "GENERAL", "NEW", await hashPassword(input.data.trackingPassword),
+        immediate, immediate ? "MODERATE" : "WATCH", "NEW", await hashPassword(input.data.trackingPassword),
         await hashOpaqueToken(uploadToken),
       ),
       db.prepare(
@@ -91,6 +91,7 @@ export async function POST(request: Request) {
     return Response.json({ caseNumber, uploadToken }, { status: 201 });
   } catch (error) {
     if (error instanceof Response) return error;
+    console.error("Case list/create request failed", error);
     return jsonError("ส่งเรื่องไม่สำเร็จ ลองใหม่อีกครั้งนะ", 500);
   }
 }
@@ -130,8 +131,13 @@ export async function GET(request: Request) {
     const values: string[] = [];
     if (!sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE"])) {
       const visibility: string[] = [];
-      if (sessionHasAnyRole(session, ["CASE_OFFICER", "ADVISOR"])) {
+      if (sessionHasRole(session, "STUDENT_AFFAIRS")) {
+        visibility.push("c.status='AFFAIRS_REVIEW'");
+      }
+      if (sessionHasAnyRole(session, ["STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "CASE_OFFICER", "ADVISOR"])) {
         visibility.push("c.assigned_to=?");
+        values.push(session.username);
+        visibility.push("EXISTS (SELECT 1 FROM case_assignments ca WHERE ca.case_id=c.id AND ca.username=?)");
         values.push(session.username);
       }
       if (sessionHasRole(session, "ADVISOR") && session.advisorId) {
@@ -147,9 +153,10 @@ export async function GET(request: Request) {
     if (status) { clauses.push("c.status=?"); values.push(status); }
     if (severity) { clauses.push("c.severity=?"); values.push(severity); }
     if (search) { clauses.push("(c.case_number LIKE ? OR c.title LIKE ?)"); values.push(`%${search}%`, `%${search}%`); }
+    const revealAnonymous = sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS"]);
     const { results } = await db.prepare(
       `SELECT ${SAFE_CASE_COLUMNS},cc.name category_name,
-       CASE WHEN c.is_anonymous=1 THEN 'ปกปิดตัวตน'
+       CASE WHEN c.is_anonymous=1 AND ${revealAnonymous ? "0" : "1"}=1 THEN 'ปกปิดตัวตน'
        ELSE s.prefix||s.first_name||' '||s.last_name END reporter_name,
        s.student_code,s.level,s.classroom
        FROM cases c JOIN case_categories cc ON cc.id=c.category_id

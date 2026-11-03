@@ -113,32 +113,32 @@ test("renders workflow transitions above the case drawer", async () => {
   assert.match(styles, /\.modal-backdrop\s*\{[^}]*z-index:1000/);
 });
 
-test("combines screening assignment and handoff into one clear internal workflow", async () => {
+test("routes intake screening to student affairs before team assignment", async () => {
   const [dashboard, modal, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(dashboard, /1\. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ/);
-  assert.match(dashboard, /2\. คัดกรองและมอบหมายให้/);
-  assert.match(dashboard, /transitionTarget === "ASSIGNED" && pendingAssignee/);
-  assert.match(dashboard, /assignedTo: pendingAssignee/);
+  assert.match(dashboard, /ส่งทีมกิจการนักเรียน/);
+  assert.match(dashboard, /TeamAssigneePicker/);
+  assert.match(dashboard, /อนุมัติและมอบหมาย/);
+  assert.match(dashboard, /assignees: pendingTeam/);
+  assert.match(dashboard, /leadAssignee/);
   assert.match(modal, /ข้อความนี้เป็นบันทึกภายใน/);
   assert.match(modal, /นักเรียนไม่เห็นข้อความนี้/);
-  assert.match(modal, /ยืนยันมอบหมายและส่งต่อ/);
-  assert.match(dashboard, /ให้แอดมินระบบรับดำเนินการเอง/);
-  assert.match(caseApi, /staff_user_roles/);
-  assert.match(caseApi, /sur\.role='SUPER_ADMIN'/);
+  assert.match(caseApi, /case_assignments/);
+  assert.match(caseApi, /AFFAIRS_REVIEW>IN_PROGRESS/);
+  assert.match(caseApi, /ASSIGN_CASE_TEAM/);
 });
 
-test("shows explicit completion, admin review, and case closing actions", async () => {
+test("shows explicit team completion, intake review, and case closing actions", async () => {
   const [dashboard, modal] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(dashboard, /เริ่มดำเนินการเคส/);
-  assert.match(dashboard, /ดำเนินการเสร็จแล้ว/);
-  assert.match(dashboard, /ส่งผลให้แอดมินตรวจ/);
+  assert.match(dashboard, /ทีมดำเนินการเรียบร้อย ส่งผลกลับเจ้าหน้าที่/);
+  assert.match(dashboard, /ผู้รับผิดชอบหลักเป็นผู้ส่งผลกลับเจ้าหน้าที่/);
+  assert.match(dashboard, /ส่งกลับทีมเดิมดำเนินการต่อ/);
   assert.match(dashboard, /ตรวจผลแล้ว ปิดเคส/);
   assert.match(dashboard, /ยืนยันปิดเคส/);
   assert.match(modal, /สรุปผลก่อนปิดเคส/);
@@ -165,26 +165,27 @@ test("orders the staff case queue by pending, active, then completed work", asyn
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(casesApi, /'NEW','REOPENED','SCREENING','ASSIGNED'\) THEN 0/);
-  assert.match(casesApi, /'IN_PROGRESS','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE'\) THEN 1/);
+  assert.match(casesApi, /'NEW','REOPENED','SCREENING','ASSIGNED','AFFAIRS_REVIEW','DEPUTY_REVIEW'\) THEN 0/);
+  assert.match(casesApi, /'IN_PROGRESS','INTAKE_REVIEW','ADMIN_REVIEW','DIRECTOR_REVIEW','DIRECTOR_ORDERED','PENDING_CLOSE'\) THEN 1/);
   assert.match(casesApi, /'RESOLVED','CLOSED'\) THEN 2/);
   assert.match(casesApi, /c\.requires_immediate_review DESC,c\.created_at DESC/);
   assert.match(dashboard, /ยังไม่ได้ดำเนินการ → กำลังดำเนินการ → เสร็จสิ้น/);
 });
 
-test("offers searchable active teachers and case officers when assigning a case", async () => {
+test("offers searchable active teachers for multi-person assignment", async () => {
   const [app, api, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/assignees/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(app, /AssigneeCombobox/);
+  assert.match(app, /TeamAssigneePicker/);
   assert.match(app, /พิมพ์ชื่อครูหรือเจ้าหน้าที่/);
   assert.match(app, /role="combobox"/);
-  assert.match(api, /'CASE_OFFICER','ADVISOR'/);
+  assert.match(api, /'STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'/);
   assert.match(api, /is_active=1/);
-  assert.match(caseApi, /role IN \('CASE_OFFICER','ADVISOR'\)/);
-  assert.match(caseApi, /ADVISOR: \["ASSIGNED>IN_PROGRESS"/);
+  assert.match(caseApi, /role IN \('STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'\)/);
+  assert.match(caseApi, /assignment_role/);
 });
 
 test("allows only the highest-level admin to permanently delete a case", async () => {
@@ -320,11 +321,11 @@ test("supports role-based staff accounts and ordered case handoffs", async () =>
     readFile(new URL("../components/AdminFrame.tsx", import.meta.url), "utf8"),
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
   ]);
-  for (const role of ["SUPER_ADMIN", "INTAKE", "CASE_OFFICER", "ADVISOR", "DIRECTOR"]) assert.match(auth, new RegExp(role));
+  for (const role of ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "ADVISOR", "DEPUTY_DIRECTOR", "DIRECTOR"]) assert.match(auth, new RegExp(role));
   assert.match(usersApi, /hashPassword/);
   assert.doesNotMatch(usersApi, /SELECT.*password_hash.*FROM staff_users ORDER BY/);
-  assert.match(caseApi, /NEW: \["ASSIGNED"\]/);
-  assert.match(caseApi, /ADMIN_REVIEW: \["DIRECTOR_REVIEW", "CLOSED"\]/);
+  assert.match(caseApi, /NEW>AFFAIRS_REVIEW/);
+  assert.match(caseApi, /INTAKE_REVIEW>CLOSED/);
   assert.match(caseApi, /ไม่มีสิทธิ์ส่งเคสข้ามขั้นตอนนี้/);
   assert.match(caseApi, /case_handoffs/);
   assert.match(caseApi, /handoffReason/);
@@ -344,53 +345,51 @@ test("shows directly assigned cases to advisor accounts even outside their advis
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(casesApi, /visibility\.push\("c\.assigned_to=\?"\)/);
+  assert.match(casesApi, /case_assignments ca/);
   assert.match(casesApi, /visibility\.join\(" OR "\)/);
-  assert.match(caseApi, /const directlyAssigned = String\(caseRow\.assigned_to \?\? ""\) === session\.username/);
-  assert.match(caseApi, /if \(!directlyAssigned && !roomAccess\) return jsonError\("ไม่มีสิทธิ์เปิดเคสนี้"/);
-  assert.match(caseApi, /const directlyAssigned = item\.assigned_to === session\.username/);
-  assert.match(caseApi, /if \(input\.data\.status && !directlyAssigned\)/);
+  assert.match(caseApi, /const directlyAssigned = String\(caseRow\.assigned_to \?\? ""\) === session\.username \|\| participant/);
+  assert.match(caseApi, /!directlyAssigned && !affairsQueue && !roomAccess/);
+  assert.match(caseApi, /const isLead = item\.assigned_to === actor/);
 });
 
-test("lets the current case recipient hand off an open case to another recipient", async () => {
+test("lets student affairs assign multiple teachers with one lead", async () => {
   const [dashboard, caseApi, assigneesApi, transitionModal] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/assignees/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(dashboard, /selectedStatus === "IN_PROGRESS"/);
-  assert.doesNotMatch(dashboard, /isCurrentAssignee && \["ASSIGNED", "IN_PROGRESS", "DIRECTOR_ORDERED"\]\.includes/);
-  assert.match(dashboard, /ส่งต่อเคสให้ \{pendingAssigneeName\}/);
-  assert.match(dashboard, /reassignment/);
-  assert.match(caseApi, /const isReassignment = input\.data\.assignedTo/);
-  assert.match(caseApi, /REASSIGN_CASE/);
-  assert.doesNotMatch(caseApi, /กรุณาระบุเหตุผลหรือคำสั่งสำหรับผู้รับช่วงต่อ/);
+  assert.match(dashboard, /pendingTeam/);
+  assert.match(dashboard, /ผู้รับผิดชอบหลัก/);
+  assert.match(dashboard, /เลือกได้หลายคน/);
+  assert.match(caseApi, /assignees: z\.array/);
+  assert.match(caseApi, /case_assignments/);
+  assert.match(caseApi, /ASSIGN_CASE_TEAM/);
   assert.doesNotMatch(assigneesApi, /ไม่มีสิทธิ์ดูรายชื่อผู้รับผิดชอบ/);
-  assert.match(transitionModal, /ยืนยันส่งต่อผู้รับผิดชอบ/);
-  assert.match(caseApi, /ต้องเริ่มดำเนินการเคสก่อน จึงจะส่งต่อผู้รับผิดชอบได้/);
+  assert.match(transitionModal, /นักเรียนไม่เห็นข้อความนี้/);
 });
 
-test("combines screening and initial assignment into one action", async () => {
+test("separates intake screening from student-affairs approval", async () => {
   const [dashboard, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(dashboard, /คัดกรองและมอบหมายให้/);
-  assert.doesNotMatch(dashboard, /รับเรื่องและเริ่มคัดกรอง/);
-  assert.match(caseApi, /\["NEW", "REOPENED", "SCREENING"\]\.includes\(item\.status\)/);
-  assert.match(caseApi, /NEW: \["ASSIGNED"\]/);
-  assert.doesNotMatch(caseApi, /กรุณาระบุเหตุผลหรือคำสั่งในการส่งต่อ/);
+  assert.match(dashboard, /ส่งทีมกิจการนักเรียน/);
+  assert.match(dashboard, /ไม่อนุมัติ ส่งกลับเจ้าหน้าที่/);
+  assert.match(caseApi, /NEW>AFFAIRS_REVIEW/);
+  assert.match(caseApi, /AFFAIRS_REVIEW>INTAKE_REVIEW/);
+  assert.match(caseApi, /เคสรุนแรงหรือวิกฤตต้องส่งรองผู้อำนวยการ/);
 });
 
-test("allows the directly assigned staff member to close their own in-progress case", async () => {
+test("requires the lead teacher to return completed work to intake", async () => {
   const [dashboard, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /selected\.case\.status === "IN_PROGRESS" && isCurrentAssignee/);
-  assert.match(dashboard, /ปิดเคสของฉัน/);
-  assert.match(caseApi, /const directAssigneeClose/);
-  assert.match(caseApi, /directSuperAdminClose \|\| directAssigneeClose/);
+  assert.match(dashboard, /ส่งผลกลับเจ้าหน้าที่/);
+  assert.doesNotMatch(dashboard, /ปิดเคสของฉัน/);
+  assert.match(caseApi, /requestedStatus !== "INTAKE_REVIEW" \|\| isLead/);
 });
 
 test("groups and orders statuses from pending work through completion", async () => {
@@ -444,15 +443,16 @@ test("renders timeline updates as readable Thai instead of raw JSON", async () =
   assert.match(styles, /white-space:pre-wrap/);
 });
 
-test("closes reviewed cases directly and lets a director close without another confirmation", async () => {
+test("lets intake and executives close cases at their decision points", async () => {
   const [dashboard, caseApi, directorApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/director/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /onClick=\{\(\) => setTransitionTarget\("CLOSED"\)\}/);
-  assert.match(caseApi, /ADMIN_REVIEW: \["DIRECTOR_REVIEW", "CLOSED"\]/);
-  assert.match(directorApi, /input\.data\.action === "RESOLVE" \? "CLOSED"/);
+  assert.match(caseApi, /INTAKE_REVIEW>CLOSED/);
+  assert.match(caseApi, /NEW>CLOSED/);
+  assert.match(directorApi, /input\.data\.action === "CLOSE" \? "CLOSED"/);
 });
 
 test("keeps the super-admin close override while allowing optional workflow messages", async () => {
@@ -464,8 +464,8 @@ test("keeps the super-admin close override while allowing optional workflow mess
   assert.match(dashboard, /currentRole === "SUPER_ADMIN"/);
   assert.match(dashboard, /ปิดเคสทันที/);
   assert.match(dashboard, /setTransitionTarget\("CLOSED"\)/);
-  assert.match(caseApi, /const directSuperAdminClose/);
-  assert.match(caseApi, /const isSuperAdmin = sessionHasRole\(session, "SUPER_ADMIN"\)/);
+  assert.match(caseApi, /const isSuper = sessionHasRole\(session, "SUPER_ADMIN"\)/);
+  assert.match(caseApi, /const permitted = isSuper/);
   assert.doesNotMatch(caseApi, /!input\.data\.handoffReason/);
   assert.match(transitionModal, /สรุปผลก่อนปิดเคส \(ถ้ามี\)/);
   assert.doesNotMatch(transitionModal, /required placeholder/);
