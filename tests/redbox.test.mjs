@@ -178,6 +178,16 @@ test("orders the staff case queue by pending, active, then completed work", asyn
   assert.match(dashboard, /ยังไม่ได้ดำเนินการ → กำลังดำเนินการ → เสร็จสิ้น/);
 });
 
+test("shows each case title beneath its case number without adding a crowded column", async () => {
+  const [dashboard, styles] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /className="case-list-title" title=\{item\.title\}>\{item\.title\}/);
+  assert.match(styles, /\.case-list-title\s*\{[^}]*text-overflow:ellipsis/);
+  assert.match(styles, /\.case-list-title\s*\{[^}]*white-space:nowrap/);
+});
+
 test("offers searchable active teachers for multi-person assignment", async () => {
   const [app, api, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),

@@ -1955,8 +1955,9 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                         }
                         onClick={() => openCase(item.case_number)}
                       >
-                        <td>
+                        <td className="case-id-cell">
                           <b>{item.case_number}</b>
+                          <span className="case-list-title" title={item.title}>{item.title}</span>
                           {item.requires_immediate_review ? (
                             <small className="urgent-label">
                               <FontAwesomeIcon icon={faTriangleExclamation} />{" "}

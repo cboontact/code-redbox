@@ -450,6 +450,14 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
   .case-modal-body { padding:19px 16px 28px; }
 }
 
+.case-id-cell { min-width:230px; max-width:290px; }
+.case-list-title { display:block; max-width:270px; margin-top:4px; overflow:hidden; color:#687588; font-size:11px; font-weight:500; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
+.case-table tbody tr:hover .case-list-title { color:#3f4d61; }
+@media (max-width:600px) {
+  .case-id-cell { min-width:210px; max-width:240px; }
+  .case-list-title { max-width:220px; font-size:10px; }
+}
+
 @media (max-width:360px) {
   .main-admin-sidebar nav a { font-size:11px; }
   .stat-grid { grid-template-columns:1fr; }
