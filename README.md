@@ -1332,6 +1332,7 @@ UI ควรแยก Tab “ครูที่ปรึกษาทั้งห
 | `GET` | `/api/admin/users` | รายการบัญชีและบทบาท | Super admin |
 | `POST` | `/api/admin/users` | สร้างบัญชี | Super admin |
 | `PATCH` | `/api/admin/users/:id` | แก้ชื่อ บทบาท สถานะ หรือรีเซ็ตรหัส | Super admin |
+| `DELETE` | `/api/admin/users/:id` | ลบบัญชีที่ไม่มีประวัติเกี่ยวข้องกับเคส | Super admin |
 
 Validation:
 

@@ -581,6 +581,11 @@ test("shows role tabs and grants anonymous student identity access per user", as
   assert.match(usersUi, /ดูตัวตนนักเรียน/);
   assert.match(usersUi, /เชื่อมข้อมูลครูที่ปรึกษาแล้ว/);
   assert.match(usersUi, /accountName === advisorName/);
+  assert.match(usersUi, /ยืนยันลบบัญชี/);
+  assert.match(usersUi, /แก้ไขข้อมูลและสิทธิ์/);
+  assert.match(updateUserApi, /export async function DELETE/);
+  assert.match(updateUserApi, /DELETE_STAFF_USER/);
+  assert.match(updateUserApi, /มีประวัติเกี่ยวข้องกับเคส/);
   assert.match(usersUi, /IDENTITY_ACCESS/);
   assert.match(usersUi, /canViewStudentIdentity/);
   assert.match(usersApi, /can_view_student_identity/);

@@ -81,3 +81,33 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return jsonError("ไม่สามารถแก้ไขบัญชีผู้ใช้ได้", 500);
   }
 }
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const actor = await requireAdmin(request);
+    const session = await getAdminSession(request);
+    const db = await ensureDatabase();
+    const { id } = await context.params;
+    const current = await db.prepare("SELECT id,username,display_name FROM staff_users WHERE id=?").bind(id).first<{ id: string; username: string; display_name: string }>();
+    if (!current) return jsonError("ไม่พบบัญชีผู้ใช้", 404);
+    if (current.username === "cboonta") return jsonError("บัญชีผู้ดูแลระบบสูงสุดไม่สามารถลบได้", 403);
+    if (session?.userId === id) return jsonError("ไม่สามารถลบบัญชีที่กำลังใช้งานอยู่", 409);
+
+    const linkedCase = await db.prepare(`SELECT c.case_number FROM cases c
+      WHERE c.assigned_to=? OR c.exclusive_reviewer_username=?
+        OR EXISTS (SELECT 1 FROM case_assignments ca WHERE ca.case_id=c.id AND ca.user_id=?)
+      LIMIT 1`).bind(current.username, current.username, id).first<{ case_number: string }>();
+    if (linkedCase) return jsonError(`บัญชีนี้มีประวัติเกี่ยวข้องกับเคส ${linkedCase.case_number} จึงลบถาวรไม่ได้ กรุณาปิดใช้งานบัญชีแทน`, 409);
+
+    await db.batch([
+      db.prepare("DELETE FROM staff_sessions WHERE user_id=?").bind(id),
+      db.prepare("DELETE FROM staff_users WHERE id=?").bind(id),
+      db.prepare("INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)")
+        .bind(createId("audit"), "DELETE_STAFF_USER", "staff_user", id, actor, JSON.stringify({ username: current.username, displayName: current.display_name })),
+    ]);
+    return Response.json({ success: true });
+  } catch (error) {
+    if (error instanceof Response) return error;
+    return jsonError("ไม่สามารถลบบัญชีผู้ใช้ได้", 500);
+  }
+}
