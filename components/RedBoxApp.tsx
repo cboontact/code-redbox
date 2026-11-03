@@ -1349,7 +1349,7 @@ function AssigneeCombobox({
   type Assignee = {
     username: string;
     display_name: string;
-    role: "CASE_OFFICER" | "ADVISOR";
+    role: "SUPER_ADMIN" | "STUDENT_AFFAIRS" | "LEVEL_HEAD" | "TEACHER" | "CASE_OFFICER" | "ADVISOR";
   };
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [loadError, setLoadError] = useState("");
@@ -1434,9 +1434,7 @@ function AssigneeCombobox({
                 <span>
                   <b>{item.display_name}</b>
                   <small>
-                    {item.role === "ADVISOR"
-                      ? "ครูที่ปรึกษา"
-                      : "ผู้รับผิดชอบเคส"}{" "}
+                    {item.role === "ADVISOR" ? "ครูที่ปรึกษา" : item.role === "SUPER_ADMIN" ? "แอดมินระบบ" : "ผู้รับผิดชอบเคส"}{" "}
                     · @{item.username}
                   </small>
                 </span>
@@ -1479,7 +1477,7 @@ function TeamAssigneePicker({
       })
       .catch(() => setError("โหลดรายชื่อครูไม่สำเร็จ กดรีเฟรชแล้วลองอีกครั้ง"));
   }, []);
-  const roleLabels: Record<string, string> = { STUDENT_AFFAIRS: "ครูกิจการนักเรียน", LEVEL_HEAD: "หัวหน้าระดับ", ADVISOR: "ครูที่ปรึกษา", TEACHER: "ครูผู้ดำเนินการ", CASE_OFFICER: "ผู้รับผิดชอบเดิม" };
+  const roleLabels: Record<string, string> = { SUPER_ADMIN: "แอดมินระบบ", STUDENT_AFFAIRS: "ครูกิจการนักเรียน", LEVEL_HEAD: "หัวหน้าระดับ", ADVISOR: "ครูที่ปรึกษา", TEACHER: "ครูผู้ดำเนินการ", CASE_OFFICER: "ผู้รับผิดชอบเดิม" };
   const filtered = items.filter((item) => `${item.display_name} ${item.username} ${roleLabels[item.role] ?? item.role}`.toLocaleLowerCase("th-TH").includes(query.trim().toLocaleLowerCase("th-TH"))).slice(0, 20);
   function toggle(username: string) {
     const next = selected.includes(username) ? selected.filter((value) => value !== username) : [...selected, username];

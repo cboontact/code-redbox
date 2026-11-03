@@ -182,9 +182,9 @@ test("offers searchable active teachers for multi-person assignment", async () =
   assert.match(app, /TeamAssigneePicker/);
   assert.match(app, /พิมพ์ชื่อครูหรือเจ้าหน้าที่/);
   assert.match(app, /role="combobox"/);
-  assert.match(api, /'STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'/);
+  assert.match(api, /'SUPER_ADMIN','STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'/);
   assert.match(api, /is_active=1/);
-  assert.match(caseApi, /role IN \('STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'\)/);
+  assert.match(caseApi, /role IN \('SUPER_ADMIN','STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'\)/);
   assert.match(caseApi, /assignment_role/);
 });
 

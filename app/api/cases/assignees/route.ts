@@ -11,12 +11,13 @@ export async function GET(request: Request) {
         WHEN EXISTS (SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=su.id AND sur.role='LEVEL_HEAD') THEN 'LEVEL_HEAD'
         WHEN EXISTS (SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=su.id AND sur.role='ADVISOR') THEN 'ADVISOR'
         WHEN EXISTS (SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=su.id AND sur.role='STUDENT_AFFAIRS') THEN 'STUDENT_AFFAIRS'
+        WHEN EXISTS (SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=su.id AND sur.role='SUPER_ADMIN') THEN 'SUPER_ADMIN'
         ELSE 'TEACHER' END role
       FROM staff_users su
       WHERE su.is_active=1 AND EXISTS (
-        SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=su.id AND sur.role IN ('STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER')
+        SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=su.id AND sur.role IN ('SUPER_ADMIN','STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER')
       )
-      ORDER BY CASE role WHEN 'LEVEL_HEAD' THEN 0 WHEN 'ADVISOR' THEN 1 WHEN 'STUDENT_AFFAIRS' THEN 2 ELSE 3 END,su.display_name,su.username`).all();
+      ORDER BY CASE role WHEN 'LEVEL_HEAD' THEN 0 WHEN 'ADVISOR' THEN 1 WHEN 'STUDENT_AFFAIRS' THEN 2 WHEN 'TEACHER' THEN 3 WHEN 'SUPER_ADMIN' THEN 4 ELSE 5 END,su.display_name,su.username`).all();
     return Response.json({ assignees: results });
   } catch (error) {
     if (error instanceof Response) return error;
