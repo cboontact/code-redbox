@@ -456,10 +456,11 @@ test("lets intake and executives close cases at their decision points", async ()
 });
 
 test("keeps the super-admin close override while allowing optional workflow messages", async () => {
-  const [dashboard, caseApi, transitionModal] = await Promise.all([
+  const [dashboard, caseApi, transitionModal, styles] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/WorkflowTransitionModal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /currentRole === "SUPER_ADMIN"/);
   assert.match(dashboard, /ปิดเคสทันที/);
@@ -470,6 +471,7 @@ test("keeps the super-admin close override while allowing optional workflow mess
   assert.match(transitionModal, /สรุปผลก่อนปิดเคส \(ถ้ามี\)/);
   assert.doesNotMatch(transitionModal, /required placeholder/);
   assert.doesNotMatch(transitionModal, /reason\.trim\(\)\.length < 2/);
+  assert.match(styles, /\.button\.close-case-button\s*\{\s*color:#fff/);
 });
 
 test("allows director actions without typing an accompanying message", async () => {
