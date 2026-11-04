@@ -113,11 +113,12 @@ export async function getAdminSession(request: Request): Promise<SessionPayload 
     const valid = parsed.exp > Date.now() && parsed.username && rolePriority.includes(parsed.role);
     if (!valid) return null;
     const db = await ensureDatabase();
-    const active = await db.prepare("SELECT id,role,advisor_id,can_view_student_identity,must_change_password FROM staff_users WHERE id=? AND is_active=1").bind(parsed.userId).first<{ id: string; role: string; advisor_id: string | null; can_view_student_identity: number; must_change_password: number }>();
+    const active = await db.prepare("SELECT id,display_name,role,advisor_id,can_view_student_identity,must_change_password FROM staff_users WHERE id=? AND is_active=1").bind(parsed.userId).first<{ id: string; display_name: string; role: string; advisor_id: string | null; can_view_student_identity: number; must_change_password: number }>();
     if (!active) return null;
     const roleRows = await db.prepare("SELECT role FROM staff_user_roles WHERE user_id=? ORDER BY role").bind(parsed.userId).all<{ role: string }>();
     parsed.roles = normalizeRoles(roleRows.results.map((item) => item.role), active.role);
     if (!sessionHasRole(parsed, parsed.role)) return null;
+    parsed.displayName = active.display_name;
     parsed.advisorId = active.advisor_id;
     parsed.canViewStudentIdentity = Boolean(active.can_view_student_identity);
     parsed.mustChangePassword = Boolean(active.must_change_password);

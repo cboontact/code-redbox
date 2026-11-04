@@ -201,14 +201,16 @@ export async function ensureDatabase() {
   if (!owner) {
     await env.DB.prepare(`INSERT INTO staff_users
       (id,username,password_hash,display_name,role,advisor_id,can_view_student_identity,must_change_password,is_active,created_by)
-      VALUES ('staff-super-admin','cboonta',?,'ผู้ดูแลระบบสูงสุด','SUPER_ADMIN',NULL,1,0,1,'system')`)
+      VALUES ('staff-super-admin','cboonta',?,'นายชลนที บุญทา','SUPER_ADMIN',NULL,1,0,1,'system')`)
       .bind(await hashPassword("cboonta")).run();
   } else {
     const migrateLegacyOwnerPassword = owner.password_hash.startsWith("pbkdf2$");
     const replacementHash = migrateLegacyOwnerPassword ? await hashPassword("cboonta") : null;
     await env.DB.prepare(`UPDATE staff_users SET
       password_hash=CASE WHEN ? IS NULL THEN password_hash ELSE ? END,
-      display_name='ผู้ดูแลระบบสูงสุด',role='SUPER_ADMIN',advisor_id=NULL,can_view_student_identity=1,
+      display_name=COALESCE((SELECT a.prefix||a.first_name||' '||a.last_name FROM advisors a
+        WHERE lower(a.source_username)='cboonta' AND a.is_active=1 LIMIT 1),'นายชลนที บุญทา'),
+      role='SUPER_ADMIN',advisor_id=NULL,can_view_student_identity=1,
       must_change_password=0,is_active=1,updated_at=CURRENT_TIMESTAMP WHERE username='cboonta'`)
       .bind(replacementHash, replacementHash).run();
   }

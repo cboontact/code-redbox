@@ -779,6 +779,18 @@ test("quick role removal falls back to the advisor base role", async () => {
   assert.doesNotMatch(usersUi, /บัญชีต้องมีอย่างน้อย 1 บทบาท/);
 });
 
+test("shows the owner name while keeping super admin as a separate role label", async () => {
+  const [bootstrap, auth, frame] = await Promise.all([
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/admin-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/AdminFrame.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(bootstrap, /นายชลนที บุญทา/);
+  assert.doesNotMatch(bootstrap, /display_name='ผู้ดูแลระบบสูงสุด'/);
+  assert.match(auth, /parsed\.displayName = active\.display_name/);
+  assert.match(frame, /SUPER_ADMIN: "แอดมินระบบ"/);
+});
+
 test("routes students from cboonta advisory rooms into an owner-only first review", async () => {
   const [casesApi, caseDetailApi, uploadsApi, exclusiveReview, dashboard, schema, migration] = await Promise.all([
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
