@@ -214,6 +214,17 @@ export async function ensureDatabase() {
   }
   await env.DB.prepare("INSERT OR IGNORE INTO staff_user_roles (user_id,role) SELECT id,role FROM staff_users").run();
   await env.DB.prepare("INSERT OR IGNORE INTO staff_user_roles (user_id,role) VALUES ('staff-super-admin','SUPER_ADMIN')").run();
+  await env.DB.prepare(`UPDATE staff_users SET advisor_id=(
+    SELECT a.id FROM advisors a WHERE a.is_active=1 AND lower(a.source_username)=lower(staff_users.username)
+      AND NOT EXISTS (SELECT 1 FROM staff_users linked WHERE linked.advisor_id=a.id AND linked.id<>staff_users.id)
+    LIMIT 1
+  ) WHERE advisor_id IS NULL AND EXISTS (
+    SELECT 1 FROM advisors a WHERE a.is_active=1 AND lower(a.source_username)=lower(staff_users.username)
+      AND NOT EXISTS (SELECT 1 FROM staff_users linked WHERE linked.advisor_id=a.id AND linked.id<>staff_users.id)
+  )`).run();
+  await env.DB.prepare(`INSERT OR IGNORE INTO staff_user_roles (user_id,role)
+    SELECT su.id,'ADVISOR' FROM staff_users su
+    JOIN advisors a ON a.id=su.advisor_id AND a.is_active=1`).run();
   ready = true;
   return env.DB;
 }

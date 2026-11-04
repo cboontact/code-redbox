@@ -417,7 +417,7 @@ test("supports role-based staff accounts and ordered case handoffs", async () =>
   assert.match(usersUi, /เพิ่มหรือถอนสิทธิ์/);
   assert.match(usersUi, /ถอนสิทธิ์/);
   assert.match(usersUi, /เพิ่มสิทธิ์/);
-  assert.match(usersUi, /ต้องเหลืออย่างน้อย 1 สิทธิ์/);
+  assert.match(usersUi, /ครูที่ปรึกษาเป็นสิทธิ์พื้นฐาน/);
   assert.match(usersUi, /กำลังปรับบทบาทของบัญชี/);
   assert.match(usersUi, /สิทธิ์ระดับสูงสุด/);
   assert.match(updateUserApi, /await requireAdmin\(request\)/);
@@ -700,8 +700,9 @@ test("shows role tabs and grants anonymous student identity access per user", as
   assert.match(usersUi, /advisorScopeLabel/);
   assert.doesNotMatch(usersUi, /ใช้ข้อมูลห้องครูที่ปรึกษาแล้ว/);
   assert.doesNotMatch(usersUi, /บทบาทในบัญชีเดียว/);
-  assert.match(usersUi, /ครูคนนี้ดูแลห้องใด/);
-  assert.match(usersUi, /ไม่ได้สร้างบัญชีซ้ำหรือเชื่อมระบบภายนอก/);
+  assert.doesNotMatch(usersUi, /ครูคนนี้ดูแลห้องใด/);
+  assert.doesNotMatch(usersUi, /เลือกชื่อครูเพื่อใช้ข้อมูลห้องที่ดูแล/);
+  assert.match(usersUi, /ระบบจับคู่ห้องที่ดูแลจาก Username อัตโนมัติ/);
   assert.match(usersUi, /advisorRoomLabel/);
   assert.match(usersUi, /advisor\.source_username/);
   assert.match(usersUi, /ยืนยันลบบัญชี/);
@@ -723,6 +724,27 @@ test("shows role tabs and grants anonymous student identity access per user", as
   for (const route of [casesApi, caseDetailApi, directorApi, directorDetailApi]) assert.match(route, /sessionCanViewStudentIdentity/);
   assert.match(schema, /canViewStudentIdentity/);
   assert.match(migration, /can_view_student_identity/);
+});
+
+test("treats advisor access as the automatic base role for every staff account", async () => {
+  const [usersUi, usersApi, updateUserApi, accountLink, bootstrap] = await Promise.all([
+    readFile(new URL("../components/AdminUsers.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/users/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/advisor-account.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(usersUi, /roles: \["ADVISOR"\]/);
+  assert.match(usersUi, /if \(role === "ADVISOR"\) return/);
+  assert.match(usersUi, /สิทธิ์พื้นฐานของบุคลากรทุกคน/);
+  assert.match(usersUi, /tabRole\.value !== "ADVISOR"/);
+  assert.match(usersUi, /removingRole\.role === "ADVISOR"/);
+  for (const route of [usersApi, updateUserApi]) {
+    assert.match(route, /includeAdvisorRole/);
+    assert.match(route, /resolveAdvisorAccountLink/);
+  }
+  assert.match(accountLink, /lower\(source_username\)=lower\(\?\)/);
+  assert.match(bootstrap, /INSERT OR IGNORE INTO staff_user_roles \(user_id,role\)[\s\S]*?'ADVISOR'/);
 });
 
 test("routes students from cboonta advisory rooms into an owner-only first review", async () => {

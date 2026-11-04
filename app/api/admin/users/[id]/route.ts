@@ -3,6 +3,7 @@ import { createId, ensureDatabase } from "../../../../../db/bootstrap";
 import { getAdminSession, requireAdmin, type StaffRole } from "../../../../../lib/admin-auth";
 import { hashPassword } from "../../../../../lib/password";
 import { jsonError } from "../../../../../lib/security";
+import { includeAdvisorRole, resolveAdvisorAccountLink } from "../../../../../lib/advisor-account";
 
 const roleSchema = z.enum(["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "ADVISOR", "DEPUTY_DIRECTOR", "DIRECTOR"]);
 const rolesSchema = z.array(roleSchema).min(1).max(8).refine((roles) => new Set(roles).size === roles.length);
@@ -37,7 +38,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const currentRoleRows = await db.prepare("SELECT role FROM staff_user_roles WHERE user_id=?").bind(id).all<{ role: StaffRole }>();
     const currentRoles = currentRoleRows.results.length ? currentRoleRows.results.map((item) => item.role) : [current.role];
-    const targetRoles = (input.data.roles ?? currentRoles) as StaffRole[];
+    const targetRoles = includeAdvisorRole((input.data.roles ?? currentRoles) as StaffRole[]);
     const removesSuperAdmin = currentRoles.includes("SUPER_ADMIN") && (!targetRoles.includes("SUPER_ADMIN") || input.data.isActive === false);
     if (removesSuperAdmin) {
       const count = await db.prepare(`SELECT COUNT(DISTINCT su.id) total FROM staff_users su
@@ -46,16 +47,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       if ((count?.total ?? 0) <= 1) return jsonError("ระบบต้องมีแอดมินระบบอย่างน้อย 1 บัญชี", 409);
     }
 
-    const targetAdvisorId = targetRoles.includes("ADVISOR")
-      ? (input.data.advisorId !== undefined ? input.data.advisorId : current.advisor_id)
-      : null;
-    if (targetRoles.includes("ADVISOR")) {
-      if (!targetAdvisorId) return jsonError("กรุณาเลือกครูที่ปรึกษาที่ต้องการเชื่อมบัญชี");
-      const advisor = await db.prepare("SELECT id FROM advisors WHERE id=? AND is_active=1").bind(targetAdvisorId).first();
-      if (!advisor) return jsonError("ไม่พบข้อมูลครูที่ปรึกษา", 404);
-      const linked = await db.prepare("SELECT id FROM staff_users WHERE advisor_id=? AND id<>?").bind(targetAdvisorId, id).first();
-      if (linked) return jsonError("ครูที่ปรึกษาคนนี้มีบัญชีผู้ใช้งานแล้ว", 409);
-    }
+    const targetAdvisorId = await resolveAdvisorAccountLink(db, current.username, current.advisor_id ?? input.data.advisorId);
+    if (!targetAdvisorId) return jsonError("ไม่พบข้อมูลครูที่ปรึกษาที่ใช้ Username นี้ กรุณาเพิ่มข้อมูลครูที่ปรึกษาก่อนบันทึกบัญชี", 409);
+    const linked = await db.prepare("SELECT id FROM staff_users WHERE advisor_id=? AND id<>?").bind(targetAdvisorId, id).first();
+    if (linked) return jsonError("ครูที่ปรึกษาคนนี้มีบัญชีผู้ใช้งานแล้ว", 409);
 
     const updates: string[] = [];
     const values: Array<string | number | null> = [];
@@ -64,7 +59,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (input.data.isActive !== undefined) { updates.push("is_active=?"); values.push(input.data.isActive ? 1 : 0); }
     if (input.data.password) { updates.push("password_hash=?"); values.push(await hashPassword(input.data.password)); updates.push("must_change_password=1"); }
     if (input.data.canViewStudentIdentity !== undefined) { updates.push("can_view_student_identity=?"); values.push(input.data.canViewStudentIdentity ? 1 : 0); }
-    if (input.data.advisorId !== undefined || input.data.roles) { updates.push("advisor_id=?"); values.push(targetAdvisorId); }
+    if (current.advisor_id !== targetAdvisorId || input.data.roles) { updates.push("advisor_id=?"); values.push(targetAdvisorId); }
 
     const statements: D1PreparedStatement[] = [];
     if (updates.length) statements.push(db.prepare(`UPDATE staff_users SET ${updates.join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(...values, id));

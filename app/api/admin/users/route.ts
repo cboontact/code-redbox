@@ -3,6 +3,7 @@ import { createId, ensureDatabase } from "../../../../db/bootstrap";
 import { requireAdmin, type StaffRole } from "../../../../lib/admin-auth";
 import { hashPassword } from "../../../../lib/password";
 import { jsonError } from "../../../../lib/security";
+import { includeAdvisorRole, resolveAdvisorAccountLink } from "../../../../lib/advisor-account";
 
 const roleSchema = z.enum(["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "ADVISOR", "DEPUTY_DIRECTOR", "DIRECTOR"]);
 const rolesSchema = z.array(roleSchema).min(1).max(8).refine((roles) => new Set(roles).size === roles.length);
@@ -58,18 +59,15 @@ export async function POST(request: Request) {
     const db = await ensureDatabase();
     const duplicate = await db.prepare("SELECT id FROM staff_users WHERE username=?").bind(input.data.username).first();
     if (duplicate) return jsonError("ชื่อผู้ใช้นี้มีอยู่แล้ว", 409);
-    if (input.data.roles.includes("ADVISOR")) {
-      if (!input.data.advisorId) return jsonError("กรุณาเลือกครูที่ปรึกษาที่ต้องการเชื่อมบัญชี");
-      const advisor = await db.prepare("SELECT id FROM advisors WHERE id=? AND is_active=1").bind(input.data.advisorId).first();
-      if (!advisor) return jsonError("ไม่พบข้อมูลครูที่ปรึกษา", 404);
-      const linked = await db.prepare("SELECT id FROM staff_users WHERE advisor_id=?").bind(input.data.advisorId).first();
-      if (linked) return jsonError("ครูที่ปรึกษาคนนี้มีบัญชีผู้ใช้งานแล้ว", 409);
-    }
     const id = createId("staff");
-    const selectedRoles = input.data.roles as StaffRole[];
+    const selectedRoles = includeAdvisorRole(input.data.roles as StaffRole[]);
+    const advisorId = await resolveAdvisorAccountLink(db, input.data.username, input.data.advisorId);
+    if (!advisorId) return jsonError("ไม่พบข้อมูลครูที่ปรึกษาที่ใช้ Username นี้ กรุณาเพิ่มข้อมูลครูที่ปรึกษาก่อนสร้างบัญชี", 409);
+    const linked = await db.prepare("SELECT id FROM staff_users WHERE advisor_id=?").bind(advisorId).first();
+    if (linked) return jsonError("ครูที่ปรึกษาคนนี้มีบัญชีผู้ใช้งานแล้ว", 409);
     await db.batch([
       db.prepare("INSERT INTO staff_users (id,username,password_hash,display_name,role,advisor_id,can_view_student_identity,must_change_password,created_by) VALUES (?,?,?,?,?,?,?,1,?)")
-        .bind(id, input.data.username, await hashPassword(input.data.password), input.data.displayName, primaryRole(selectedRoles), selectedRoles.includes("ADVISOR") ? input.data.advisorId ?? null : null, input.data.canViewStudentIdentity ? 1 : 0, actor),
+        .bind(id, input.data.username, await hashPassword(input.data.password), input.data.displayName, primaryRole(selectedRoles), advisorId, input.data.canViewStudentIdentity ? 1 : 0, actor),
       ...selectedRoles.map((role) => db.prepare("INSERT INTO staff_user_roles (user_id,role) VALUES (?,?)").bind(id, role)),
       db.prepare("INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)")
         .bind(createId("audit"), "CREATE_STAFF_USER", "staff_user", id, actor, JSON.stringify({ username: input.data.username, roles: selectedRoles, canViewStudentIdentity: input.data.canViewStudentIdentity })),
