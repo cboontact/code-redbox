@@ -608,8 +608,10 @@ test("shows role tabs and grants anonymous student identity access per user", as
   ]);
   assert.match(usersUi, /role="tablist"/);
   assert.match(usersUi, /ดูตัวตนนักเรียน/);
-  assert.match(usersUi, /ใช้ข้อมูลห้องครูที่ปรึกษาแล้ว/);
-  assert.match(usersUi, /accountName === advisorName/);
+  assert.match(usersUi, /ดูแลห้อง/);
+  assert.match(usersUi, /advisorScopeLabel/);
+  assert.doesNotMatch(usersUi, /ใช้ข้อมูลห้องครูที่ปรึกษาแล้ว/);
+  assert.doesNotMatch(usersUi, /บทบาทในบัญชีเดียว/);
   assert.match(usersUi, /ครูคนนี้ดูแลห้องใด/);
   assert.match(usersUi, /ไม่ได้สร้างบัญชีซ้ำหรือเชื่อมระบบภายนอก/);
   assert.match(usersUi, /advisorRoomLabel/);

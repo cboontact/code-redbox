@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCircleCheck, faCircleExclamation, faEye, faEyeSlash, faFloppyDisk, faKey, faLink, faLock, faMagnifyingGlass, faPen, faPlus, faShieldHalved, faTrashCan, faTriangleExclamation, faUserCheck, faUserMinus, faUserSlash, faUserTie, faUsersGear, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faCircleCheck, faCircleExclamation, faEye, faEyeSlash, faFloppyDisk, faKey, faLink, faLock, faMagnifyingGlass, faPen, faPlus, faSchool, faShieldHalved, faTrashCan, faTriangleExclamation, faUserCheck, faUserMinus, faUserSlash, faUserTie, faUsersGear, faXmark } from "@fortawesome/free-solid-svg-icons";
 
 type Role = "SUPER_ADMIN" | "INTAKE" | "STUDENT_AFFAIRS" | "LEVEL_HEAD" | "TEACHER" | "ADVISOR" | "DEPUTY_DIRECTOR" | "DIRECTOR";
 type StaffUser = { id: string; username: string; display_name: string; role: Role; roles: Role[]; advisor_id: string | null; advisor_name: string | null; can_view_student_identity: number; is_active: number; created_at: string };
@@ -21,13 +21,6 @@ const roles: Array<{ value: Role; label: string; detail: string }> = [
 ];
 
 const emptyForm = { username: "", password: "", displayName: "", roles: ["INTAKE"] as Role[], advisorId: "", canViewStudentIdentity: false };
-
-function linkedAdvisorLabel(user: StaffUser) {
-  if (!user.advisor_name) return null;
-  const accountName = user.display_name.replace(/\s+/g, "").toLocaleLowerCase("th");
-  const advisorName = user.advisor_name.replace(/\s+/g, "").toLocaleLowerCase("th");
-  return accountName === advisorName ? "ใช้ข้อมูลห้องครูที่ปรึกษาแล้ว" : `ข้อมูลครูที่ปรึกษา: ${user.advisor_name}`;
-}
 
 export function AdminUsers() {
   const [users, setUsers] = useState<StaffUser[]>([]);
@@ -131,6 +124,11 @@ export function AdminUsers() {
     const rooms = advisorAssignments.filter((item) => item.advisor_id === advisorId).map((item) => `${item.level}/${item.classroom}`);
     return rooms.length ? rooms.join(", ") : "ยังไม่ได้กำหนดห้อง";
   }
+  function advisorScopeLabel(user: StaffUser) {
+    if (!user.roles.includes("ADVISOR") || !user.advisor_id) return null;
+    const rooms = advisorRoomLabel(user.advisor_id);
+    return rooms === "ยังไม่ได้กำหนดห้อง" ? rooms : `ดูแลห้อง ${rooms}`;
+  }
   function roleNames(values: Role[]) {
     return values.map((value) => roles.find((role) => role.value === value)?.label ?? value).join(" · ");
   }
@@ -196,7 +194,23 @@ export function AdminUsers() {
     <section className="management-card user-management-card"><div className="user-list-heading"><div><h2>บัญชีผู้ใช้งานตามบทบาท</h2><p>เลือกแท็บเพื่อดูว่าแต่ละบทบาทมีใครบ้าง หนึ่งบัญชีจึงปรากฏได้หลายแท็บ</p></div><strong>{visible.length} จาก {users.length} บัญชี</strong></div>
       <div className="user-role-tabs" role="tablist" aria-label="กรองผู้ใช้งานตามบทบาท"><button type="button" role="tab" aria-selected={!roleFilter} className={!roleFilter ? "active" : ""} onClick={() => setRoleFilter("")}>ทั้งหมด <span>{users.length}</span></button>{roles.map((role) => { const count = users.filter((user) => user.roles.includes(role.value)).length; return <button type="button" role="tab" aria-selected={roleFilter === role.value} className={roleFilter === role.value ? "active" : ""} key={role.value} onClick={() => setRoleFilter(role.value)}>{role.label} <span>{count}</span></button>; })}<button type="button" role="tab" aria-selected={roleFilter === "IDENTITY_ACCESS"} className={`identity-tab ${roleFilter === "IDENTITY_ACCESS" ? "active" : ""}`} onClick={() => setRoleFilter("IDENTITY_ACCESS")}><FontAwesomeIcon icon={faEye} /> ดูตัวตนนักเรียน <span>{identityAccessCount}</span></button></div>
       <div className="advisor-filter-bar user-search-only"><label className="advisor-search"><FontAwesomeIcon icon={faMagnifyingGlass} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหาชื่อ Username หรือครูที่ปรึกษา" /></label></div>
-      <div className="user-list">{visible.length === 0 ? <div className="empty-state"><FontAwesomeIcon icon={faUsersGear} /><h3>ยังไม่มีผู้ใช้งานในแท็บนี้</h3><p>เพิ่มบทบาทหรือสิทธิ์จากปุ่มเพิ่มผู้ใช้งาน</p></div> : visible.map((user) => { const protectedAccount = user.username === "cboonta"; const canViewIdentity = protectedAccount || Boolean(user.can_view_student_identity); const advisorLabel = linkedAdvisorLabel(user); const tabRole = roles.find((role) => role.value === roleFilter); return <article key={user.id} className={!user.is_active ? "inactive" : ""}><span className="user-avatar">{user.display_name.slice(0, 1)}</span><div className="user-identity"><b>{user.display_name}</b><small>@{user.username}</small>{protectedAccount && <span className="protected-account"><FontAwesomeIcon icon={faLock} /> ผู้ดูแลสูงสุด</span>}{advisorLabel && <span className="linked-person"><FontAwesomeIcon icon={faLink} /> {advisorLabel}</span>}</div><div className="user-role"><div className="user-role-tags">{user.roles.map((value) => <span key={value}>{roles.find((role) => role.value === value)?.label ?? value}</span>)}{canViewIdentity && <span className="identity-access-tag"><FontAwesomeIcon icon={faEye} /> ดูตัวตนผู้แจ้งได้</span>}</div><small>{protectedAccount ? "เข้าถึงทุกส่วนและไม่สามารถลดสิทธิ์ได้" : `${user.roles.length} บทบาทในบัญชีเดียว`}</small></div><div className="user-actions"><button className="edit-user" onClick={() => editUser(user)} disabled={protectedAccount} title={protectedAccount ? "บัญชีผู้ดูแลสูงสุดถูกป้องกัน" : "แก้ไขข้อมูลและสิทธิ์"} aria-label={`แก้ไข ${user.display_name}`}><FontAwesomeIcon icon={protectedAccount ? faLock : faPen} /><span>{protectedAccount ? "บัญชีหลัก" : "แก้ไข"}</span></button>{!protectedAccount && tabRole && <button type="button" className="remove-role" onClick={() => setRemovingRole({ user, role: tabRole.value })} title={`นำบทบาท ${tabRole.label} ออก`} aria-label={`นำบทบาท ${tabRole.label} ออกจาก ${user.display_name}`}><FontAwesomeIcon icon={faUserMinus} /></button>}<button type="button" role="switch" aria-checked={Boolean(user.is_active)} aria-label={`${user.is_active ? "ปิด" : "เปิด"}ใช้งานบัญชี ${user.display_name}`} className={`account-toggle ${user.is_active ? "on" : "off"}`} onClick={() => toggle(user)} disabled={protectedAccount} title={protectedAccount ? "บัญชีผู้ดูแลสูงสุดเปิดใช้งานถาวร" : user.is_active ? "กดเพื่อปิดใช้งาน" : "กดเพื่อเปิดใช้งาน"}><span className="toggle-track"><span /></span></button></div></article>; })}</div>
+      <div className="user-list">{visible.length === 0 ? <div className="empty-state"><FontAwesomeIcon icon={faUsersGear} /><h3>ยังไม่มีผู้ใช้งานในแท็บนี้</h3><p>เพิ่มบทบาทหรือสิทธิ์จากปุ่มเพิ่มผู้ใช้งาน</p></div> : visible.map((user) => {
+        const protectedAccount = user.username === "cboonta";
+        const canViewIdentity = protectedAccount || Boolean(user.can_view_student_identity);
+        const advisorScope = advisorScopeLabel(user);
+        const tabRole = roles.find((role) => role.value === roleFilter);
+        return <article key={user.id} className={!user.is_active ? "inactive" : ""}>
+          <span className="user-avatar">{user.display_name.slice(0, 1)}</span>
+          <div className="user-identity"><b>{user.display_name}</b><small>@{user.username}</small></div>
+          <div className="user-role"><div className="user-role-tags">
+            {user.roles.map((value) => <span key={value}>{roles.find((role) => role.value === value)?.label ?? value}</span>)}
+            {advisorScope && <span className="advisor-scope-tag"><FontAwesomeIcon icon={faSchool} /> {advisorScope}</span>}
+            {canViewIdentity && <span className="identity-access-tag"><FontAwesomeIcon icon={faEye} /> ดูตัวตนผู้แจ้งได้</span>}
+            {protectedAccount && <span className="protected-account"><FontAwesomeIcon icon={faLock} /> ผู้ดูแลสูงสุด</span>}
+          </div></div>
+          <div className="user-actions"><button className="edit-user" onClick={() => editUser(user)} disabled={protectedAccount} title={protectedAccount ? "บัญชีผู้ดูแลสูงสุดถูกป้องกัน" : "แก้ไขข้อมูลและสิทธิ์"} aria-label={`แก้ไข ${user.display_name}`}><FontAwesomeIcon icon={protectedAccount ? faLock : faPen} /><span>{protectedAccount ? "บัญชีหลัก" : "แก้ไข"}</span></button>{!protectedAccount && tabRole && <button type="button" className="remove-role" onClick={() => setRemovingRole({ user, role: tabRole.value })} title={`นำบทบาท ${tabRole.label} ออก`} aria-label={`นำบทบาท ${tabRole.label} ออกจาก ${user.display_name}`}><FontAwesomeIcon icon={faUserMinus} /></button>}<button type="button" role="switch" aria-checked={Boolean(user.is_active)} aria-label={`${user.is_active ? "ปิด" : "เปิด"}ใช้งานบัญชี ${user.display_name}`} className={`account-toggle ${user.is_active ? "on" : "off"}`} onClick={() => toggle(user)} disabled={protectedAccount} title={protectedAccount ? "บัญชีผู้ดูแลสูงสุดเปิดใช้งานถาวร" : user.is_active ? "กดเพื่อปิดใช้งาน" : "กดเพื่อเปิดใช้งาน"}><span className="toggle-track"><span /></span></button></div>
+        </article>;
+      })}</div>
     </section>
     {open && <div className="student-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setOpen(false); }}><section className="student-modal user-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title"><form onSubmit={save}>
       <header className="student-modal-header"><div><span className="student-modal-icon"><FontAwesomeIcon icon={editing ? faPen : faPlus} /></span><div><small><FontAwesomeIcon icon={faKey} /> บัญชีและสิทธิ์</small><h2 id="user-modal-title">{editing ? "แก้ไขผู้ใช้งาน" : "เพิ่มผู้ใช้งาน"}</h2></div></div><button type="button" onClick={() => setOpen(false)} disabled={saving} aria-label="ปิด Modal"><FontAwesomeIcon icon={faXmark} /></button></header>
