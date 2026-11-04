@@ -282,6 +282,14 @@ test("does not seed fake students, advisors, or generic staff into production", 
   assert.doesNotMatch(auth, /ADMIN_PASSWORD|DIRECTOR_PASSWORD|legacy-super_admin|legacy-director/);
 });
 
+test("does not recompute the owner password hash on every database cold start", async () => {
+  const bootstrap = await readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8");
+  assert.match(bootstrap, /SELECT password_hash FROM staff_users WHERE username='cboonta'/);
+  assert.match(bootstrap, /if \(!owner\)/);
+  assert.match(bootstrap, /migrateLegacyOwnerPassword/);
+  assert.doesNotMatch(bootstrap, /ON CONFLICT\(username\) DO UPDATE SET[\s\S]*?\.bind\(await hashPassword\("cboonta"\)\)/);
+});
+
 test("uses D1 and private R2 bindings", async () => {
   const hosting = JSON.parse(await readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"));
   assert.equal(hosting.d1, "DB");

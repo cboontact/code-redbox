@@ -197,14 +197,21 @@ export async function ensureDatabase() {
       ).bind(...row),
     ),
   );
-  await env.DB.prepare(`INSERT INTO staff_users
-    (id,username,password_hash,display_name,role,advisor_id,can_view_student_identity,must_change_password,is_active,created_by)
-    VALUES ('staff-super-admin','cboonta',?,'ผู้ดูแลระบบสูงสุด','SUPER_ADMIN',NULL,1,0,1,'system')
-    ON CONFLICT(username) DO UPDATE SET
-      password_hash=CASE WHEN staff_users.password_hash LIKE 'pbkdf2$%' THEN excluded.password_hash ELSE staff_users.password_hash END,
-      display_name=excluded.display_name,role='SUPER_ADMIN',advisor_id=NULL,can_view_student_identity=1,
-      must_change_password=0,is_active=1,updated_at=CURRENT_TIMESTAMP`)
-    .bind(await hashPassword("cboonta")).run();
+  const owner = await env.DB.prepare("SELECT password_hash FROM staff_users WHERE username='cboonta'").first<{ password_hash: string }>();
+  if (!owner) {
+    await env.DB.prepare(`INSERT INTO staff_users
+      (id,username,password_hash,display_name,role,advisor_id,can_view_student_identity,must_change_password,is_active,created_by)
+      VALUES ('staff-super-admin','cboonta',?,'ผู้ดูแลระบบสูงสุด','SUPER_ADMIN',NULL,1,0,1,'system')`)
+      .bind(await hashPassword("cboonta")).run();
+  } else {
+    const migrateLegacyOwnerPassword = owner.password_hash.startsWith("pbkdf2$");
+    const replacementHash = migrateLegacyOwnerPassword ? await hashPassword("cboonta") : null;
+    await env.DB.prepare(`UPDATE staff_users SET
+      password_hash=CASE WHEN ? IS NULL THEN password_hash ELSE ? END,
+      display_name='ผู้ดูแลระบบสูงสุด',role='SUPER_ADMIN',advisor_id=NULL,can_view_student_identity=1,
+      must_change_password=0,is_active=1,updated_at=CURRENT_TIMESTAMP WHERE username='cboonta'`)
+      .bind(replacementHash, replacementHash).run();
+  }
   await env.DB.prepare("INSERT OR IGNORE INTO staff_user_roles (user_id,role) SELECT id,role FROM staff_users").run();
   await env.DB.prepare("INSERT OR IGNORE INTO staff_user_roles (user_id,role) VALUES ('staff-super-admin','SUPER_ADMIN')").run();
   ready = true;
