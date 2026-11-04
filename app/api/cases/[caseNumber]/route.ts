@@ -114,7 +114,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       const intakeEdges = new Set(["NEW>AFFAIRS_REVIEW", "NEW>DEPUTY_REVIEW", "NEW>CLOSED", "REOPENED>AFFAIRS_REVIEW", "REOPENED>DEPUTY_REVIEW", "REOPENED>CLOSED", "INTAKE_REVIEW>CLOSED", "INTAKE_REVIEW>IN_PROGRESS", "SCREENING>AFFAIRS_REVIEW", "SCREENING>ASSIGNED", "ASSIGNED>IN_PROGRESS", "ADMIN_REVIEW>CLOSED", "ADMIN_REVIEW>DIRECTOR_REVIEW", "PENDING_CLOSE>CLOSED", "RESOLVED>CLOSED", "CLOSED>REOPENED"]);
       const affairsEdges = new Set(["AFFAIRS_REVIEW>IN_PROGRESS", "AFFAIRS_REVIEW>INTAKE_REVIEW"]);
       const teamEdges = new Set(["IN_PROGRESS>INTAKE_REVIEW", "DIRECTOR_ORDERED>IN_PROGRESS"]);
-      const permitted = isSuper || (isIntake && intakeEdges.has(edge)) || (isAffairs && affairsEdges.has(edge)) || ((participant || isLead) && teamEdges.has(edge) && (requestedStatus !== "INTAKE_REVIEW" || isLead));
+      const assignedTeamEdges = new Set([...teamEdges, "ASSIGNED>IN_PROGRESS"]);
+      const permitted = isSuper || (isIntake && intakeEdges.has(edge)) || (isAffairs && affairsEdges.has(edge)) || ((participant || isLead) && assignedTeamEdges.has(edge) && (requestedStatus !== "INTAKE_REVIEW" || isLead));
       if (!permitted) return jsonError("ไม่มีสิทธิ์ส่งเคสข้ามขั้นตอนนี้", 403);
       if (["SEVERE", "CRITICAL"].includes(input.data.severity ?? item.severity) && ["NEW", "REOPENED"].includes(item.status) && requestedStatus === "AFFAIRS_REVIEW" && !isSuper) return jsonError("เคสรุนแรงหรือวิกฤตต้องส่งรองผู้อำนวยการ", 409);
     }

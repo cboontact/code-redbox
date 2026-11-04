@@ -144,12 +144,10 @@ export async function GET(request: Request) {
       if (sessionHasRole(session, "STUDENT_AFFAIRS")) {
         visibility.push("c.status='AFFAIRS_REVIEW'");
       }
-      if (sessionHasAnyRole(session, ["STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "CASE_OFFICER", "ADVISOR"])) {
-        visibility.push("c.assigned_to=?");
-        values.push(session.username);
-        visibility.push("EXISTS (SELECT 1 FROM case_assignments ca WHERE ca.case_id=c.id AND ca.username=?)");
-        values.push(session.username);
-      }
+      visibility.push("c.assigned_to=?");
+      values.push(session.username);
+      visibility.push("EXISTS (SELECT 1 FROM case_assignments ca WHERE ca.case_id=c.id AND ca.username=?)");
+      values.push(session.username);
       if (sessionHasRole(session, "ADVISOR") && session.advisorId) {
         visibility.push(`EXISTS (
           SELECT 1 FROM advisor_assignments aa

@@ -20,7 +20,7 @@ function normalizeRoles(values: string[], legacyRole?: string): StaffRole[] {
 function effectiveRole(roles: StaffRole[], requestedPortal: "ADMIN" | "DIRECTOR"): StaffRole | null {
   if (roles.includes("SUPER_ADMIN")) return "SUPER_ADMIN";
   if (requestedPortal === "DIRECTOR") return roles.includes("DEPUTY_DIRECTOR") ? "DEPUTY_DIRECTOR" : roles.includes("DIRECTOR") ? "DIRECTOR" : null;
-  return rolePriority.find((role) => !["DIRECTOR", "DEPUTY_DIRECTOR"].includes(role) && roles.includes(role)) ?? null;
+  return rolePriority.find((role) => roles.includes(role)) ?? null;
 }
 
 export function sessionHasRole(session: Pick<SessionPayload, "role" | "roles">, role: StaffRole) {
@@ -137,14 +137,14 @@ export async function requireAdmin(request: Request) {
 
 export async function requireCaseStaff(request: Request) {
   const session = await getAdminSession(request);
-  if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "ADVISOR", "CASE_OFFICER"])) throw new Response("Forbidden", { status: session ? 403 : 401 });
+  if (!session) throw new Response("Forbidden", { status: 401 });
   if (session.mustChangePassword) throw new Response("Password change required", { status: 428 });
   return session.username;
 }
 
 export async function requireCaseSession(request: Request) {
   const session = await getAdminSession(request);
-  if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "LEVEL_HEAD", "TEACHER", "ADVISOR", "CASE_OFFICER"])) throw new Response("Forbidden", { status: session ? 403 : 401 });
+  if (!session) throw new Response("Forbidden", { status: 401 });
   if (session.mustChangePassword) throw new Response("Password change required", { status: 428 });
   return session;
 }

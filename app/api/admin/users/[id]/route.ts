@@ -12,7 +12,7 @@ const rolePriority: StaffRole[] = ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "
 const updateSchema = z.object({
   displayName: z.string().trim().min(2).max(120).optional(),
   roles: rolesSchema.optional(),
-  password: z.string().min(6).max(200).optional(),
+  password: z.string().min(8).max(200).optional(),
   isActive: z.boolean().optional(),
   advisorId: z.string().trim().min(1).nullable().optional(),
   canViewStudentIdentity: z.boolean().optional(),

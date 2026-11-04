@@ -649,7 +649,8 @@ test("forces initial staff passwords to be changed without resetting changed pas
   assert.match(frame, /ตั้งรหัสผ่านใหม่ก่อนเริ่มใช้งาน/);
   assert.match(changePassword, /must_change_password=0/);
   assert.doesNotMatch(accountScript, /ON CONFLICT\(username\) DO UPDATE SET password_hash/);
-  assert.match(usersApi, /!value\.roles\.includes\("ADVISOR"\)/);
+  assert.match(usersApi, /password: z\.string\(\)\.min\(8\)/);
+  assert.doesNotMatch(usersApi, /!value\.roles\.includes\("ADVISOR"\)/);
 });
 
 test("supports multiple roles on one staff account with one login", async () => {
@@ -665,7 +666,7 @@ test("supports multiple roles on one staff account with one login", async () => 
   assert.match(auth, /sessionHasAnyRole/);
   assert.match(usersApi, /roles: rolesSchema/);
   assert.match(usersApi, /assigned\.delete\("CASE_OFFICER"\)/);
-  assert.match(usersApi, /assigned\.add\("TEACHER"\)/);
+  assert.match(usersApi, /assigned\.delete\("TEACHER"\)/);
   assert.match(updateUserApi, /DELETE FROM staff_user_roles/);
   assert.match(updateUserApi, /ข้อมูลบัญชีหรือบทบาทไม่ถูกต้อง/);
   assert.match(usersUi, /บัญชีหนึ่งมีได้หลายบทบาท/);
@@ -676,8 +677,11 @@ test("supports multiple roles on one staff account with one login", async () => 
 
 test("uses every role on an account when showing workflow actions", async () => {
   const dashboard = await readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8");
-  assert.match(dashboard, /function availableStatusEntries\(current: string, assignedRoles: string \| string\[\]\)/);
+  assert.match(dashboard, /function availableStatusEntries\([\s\S]*?assignedToCase = false[\s\S]*?isLeadAssignee = false/);
   assert.match(dashboard, /rolesForAccount\.some/);
+  assert.match(dashboard, /assignedToCase && assignmentEdges\.has\(edge\)/);
+  assert.doesNotMatch(dashboard, /TEACHER: \["IN_PROGRESS>INTAKE_REVIEW"\]/);
+  assert.doesNotMatch(dashboard, /ADVISOR: \[/);
   assert.match(dashboard, /availableStatusEntries\([\s\S]*?currentRoles/);
   assert.doesNotMatch(dashboard, /\["SUPER_ADMIN", "INTAKE"\]\.includes\(currentRole\)/);
 });

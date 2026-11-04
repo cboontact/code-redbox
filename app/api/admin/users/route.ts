@@ -11,15 +11,11 @@ const rolePriority: StaffRole[] = ["SUPER_ADMIN", "INTAKE", "STUDENT_AFFAIRS", "
 
 const createSchema = z.object({
   username: z.string().trim().min(3).max(80).regex(/^[a-zA-Z0-9._-]+$/),
-  password: z.string().min(3).max(200),
+  password: z.string().min(8).max(200),
   displayName: z.string().trim().min(2).max(120),
   roles: rolesSchema,
   advisorId: z.string().trim().min(1).nullable().optional(),
   canViewStudentIdentity: z.boolean().optional().default(false),
-}).superRefine((value, context) => {
-  if (!value.roles.includes("ADVISOR") && value.password.length < 8) {
-    context.addIssue({ code: "custom", path: ["password"], message: "รหัสผ่านเจ้าหน้าที่ต้องมีอย่างน้อย 8 ตัวอักษร" });
-  }
 });
 
 function primaryRole(roles: StaffRole[]) {
@@ -38,10 +34,8 @@ export async function GET(request: Request) {
       ORDER BY su.is_active DESC,su.display_name`).all<Record<string, unknown>>();
     const users = results.map((user) => {
       const assigned = new Set(String(user.role_values ?? user.role).split("|").filter(Boolean));
-      if (assigned.has("CASE_OFFICER")) {
-        assigned.delete("CASE_OFFICER");
-        assigned.add("TEACHER");
-      }
+      assigned.delete("CASE_OFFICER");
+      assigned.delete("TEACHER");
       return { ...user, roles: rolePriority.filter((role) => assigned.has(role)), role_values: undefined };
     });
     return Response.json({ users });
@@ -61,10 +55,12 @@ export async function POST(request: Request) {
     if (duplicate) return jsonError("ชื่อผู้ใช้นี้มีอยู่แล้ว", 409);
     const id = createId("staff");
     const selectedRoles = includeAdvisorRole(input.data.roles as StaffRole[]);
-    const advisorId = await resolveAdvisorAccountLink(db, input.data.username, input.data.advisorId);
-    if (!advisorId) return jsonError("ไม่พบข้อมูลครูที่ปรึกษาที่ใช้ Username นี้ กรุณาเพิ่มข้อมูลครูที่ปรึกษาก่อนสร้างบัญชี", 409);
-    const linked = await db.prepare("SELECT id FROM staff_users WHERE advisor_id=?").bind(advisorId).first();
-    if (linked) return jsonError("ครูที่ปรึกษาคนนี้มีบัญชีผู้ใช้งานแล้ว", 409);
+    const resolvedAdvisorId = await resolveAdvisorAccountLink(db, input.data.username, input.data.advisorId);
+    let advisorId: string | null = null;
+    if (resolvedAdvisorId) {
+      const linked = await db.prepare("SELECT id FROM staff_users WHERE advisor_id=?").bind(resolvedAdvisorId).first();
+      if (!linked) advisorId = resolvedAdvisorId;
+    }
     await db.batch([
       db.prepare("INSERT INTO staff_users (id,username,password_hash,display_name,role,advisor_id,can_view_student_identity,must_change_password,created_by) VALUES (?,?,?,?,?,?,?,1,?)")
         .bind(id, input.data.username, await hashPassword(input.data.password), input.data.displayName, primaryRole(selectedRoles), advisorId, input.data.canViewStudentIdentity ? 1 : 0, actor),

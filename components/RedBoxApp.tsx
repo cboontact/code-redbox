@@ -152,7 +152,12 @@ const severityLabels: Record<string, string> = {
   CRITICAL: "วิกฤต",
 };
 
-function availableStatusEntries(current: string, assignedRoles: string | string[]) {
+function availableStatusEntries(
+  current: string,
+  assignedRoles: string | string[],
+  assignedToCase = false,
+  isLeadAssignee = false,
+) {
   const edges: Record<string, string[]> = {
     NEW: ["AFFAIRS_REVIEW", "DEPUTY_REVIEW", "CLOSED"],
     AFFAIRS_REVIEW: ["IN_PROGRESS", "INTAKE_REVIEW"],
@@ -179,22 +184,16 @@ function availableStatusEntries(current: string, assignedRoles: string | string[
       "PENDING_CLOSE>CLOSED",
       "RESOLVED>CLOSED",
     ],
-    STUDENT_AFFAIRS: ["AFFAIRS_REVIEW>IN_PROGRESS", "AFFAIRS_REVIEW>INTAKE_REVIEW", "IN_PROGRESS>INTAKE_REVIEW"],
-    LEVEL_HEAD: ["IN_PROGRESS>INTAKE_REVIEW"],
-    TEACHER: ["IN_PROGRESS>INTAKE_REVIEW"],
-    CASE_OFFICER: [
-      "ASSIGNED>IN_PROGRESS",
-      "DIRECTOR_ORDERED>IN_PROGRESS",
-    ],
-    ADVISOR: [
-      "ASSIGNED>IN_PROGRESS",
-      "DIRECTOR_ORDERED>IN_PROGRESS",
-    ],
+    STUDENT_AFFAIRS: ["AFFAIRS_REVIEW>IN_PROGRESS", "AFFAIRS_REVIEW>INTAKE_REVIEW"],
   };
+  const assignmentEdges = new Set(["ASSIGNED>IN_PROGRESS", "DIRECTOR_ORDERED>IN_PROGRESS"]);
   const rolesForAccount = Array.isArray(assignedRoles) ? assignedRoles : [assignedRoles];
   const next = (edges[current] ?? []).filter((status) => {
     const edge = `${current}>${status}`;
-    return rolesForAccount.includes("SUPER_ADMIN") || rolesForAccount.some((role) => roleEdges[role]?.includes(edge));
+    return rolesForAccount.includes("SUPER_ADMIN")
+      || rolesForAccount.some((role) => roleEdges[role]?.includes(edge))
+      || (assignedToCase && assignmentEdges.has(edge))
+      || (isLeadAssignee && edge === "IN_PROGRESS>INTAKE_REVIEW");
   });
   return [current, ...next].map(
     (status) => [status, statusLabels[status] ?? status] as const,
@@ -1793,10 +1792,10 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
           </button>
         </nav>
         <div className="sidebar-profile">
-          <span>ผ</span>
+          <span>{(currentDisplayName || currentUsername || "บ").slice(0, 1)}</span>
           <div>
-            <b>ผู้ดูแลระบบ</b>
-            <small>ADMIN</small>
+            <b>{currentDisplayName || currentUsername || "บัญชีบุคลากร"}</b>
+            <small>{hasRole("SUPER_ADMIN") ? "แอดมินระบบ" : "บัญชีบุคลากร"}</small>
           </div>
         </div>
       </aside>
@@ -1822,7 +1821,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
           <div className="dashboard-heading">
             <div>
               <span className="eyebrow">ศูนย์ดูแลนักเรียน</span>
-              <h1>สวัสดีครับ ผู้ดูแลระบบ</h1>
+              <h1>สวัสดีครับ {currentDisplayName || currentUsername || "บุคลากร"}</h1>
               <p>ภาพรวมเคสและเรื่องที่ต้องให้ความสำคัญวันนี้</p>
             </div>
             <button className="button secondary" onClick={loadCases}>
@@ -2160,6 +2159,8 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 {availableStatusEntries(
                   String(selected.case.status),
                   currentRoles,
+                  isCurrentAssignee || isTeamMember,
+                  isCurrentAssignee,
                 ).length > 1 ? (
                   <div className="workflow-next-step">
                     <FontAwesomeIcon icon={faArrowRight} />
@@ -2298,9 +2299,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </>
                 )}
                 {selected.case.status === "ASSIGNED" &&
-                  availableStatusEntries("ASSIGNED", currentRoles).some(
-                    ([value]) => value === "IN_PROGRESS",
-                  ) && (
+                  (isCurrentAssignee || isTeamMember || hasRole("SUPER_ADMIN")) && (
                     <button
                       type="button"
                       className="button primary wide workflow-submit"
@@ -2311,9 +2310,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </button>
                   )}
                 {selected.case.status === "DIRECTOR_ORDERED" &&
-                  availableStatusEntries("DIRECTOR_ORDERED", currentRoles).some(
-                    ([value]) => value === "IN_PROGRESS",
-                  ) && (
+                  (isCurrentAssignee || isTeamMember || hasRole("SUPER_ADMIN")) && (
                     <button
                       type="button"
                       className="button primary wide workflow-submit"
