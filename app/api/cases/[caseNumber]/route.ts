@@ -101,6 +101,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     if (input.data.note && !(isSuper || isIntake || participant || isLead || (isAffairs && item.status === "AFFAIRS_REVIEW"))) return jsonError("ต้องได้รับมอบหมายก่อนจึงจะเพิ่มบันทึกภายในได้", 403);
     if (input.data.resetTrackingPassword && !isSuper) return jsonError("เฉพาะแอดมินระบบเท่านั้นที่รีเซ็ตรหัสติดตามได้", 403);
     if (input.data.severity !== undefined && !isSuper && !isIntake) return jsonError("เฉพาะเจ้าหน้าที่รับเรื่องที่ปรับระดับความรุนแรงได้", 403);
+    if (input.data.severity !== undefined && !["NEW", "REOPENED"].includes(item.status)) return jsonError("ระดับความสำคัญถูกยืนยันแล้วหลังส่งต่อเคส จึงไม่สามารถแก้ไขได้", 409);
     if (input.data.assignedTo !== undefined && !isSuper && !(isIntake && ["SCREENING", "ASSIGNED"].includes(item.status))) {
       return jsonError("ไม่สามารถเปลี่ยนผู้รับผิดชอบนอกขั้นตอนมอบหมายได้", 403);
     }

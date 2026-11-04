@@ -116,6 +116,7 @@ test("renders workflow transitions above the responsive case modal", async () =>
   assert.match(dashboard, /document\.body\.style\.overflow = "hidden"/);
   assert.match(modal, /createPortal/);
   assert.match(modal, /document\.body/);
+  assert.doesNotMatch(modal, /document\.body\.style\.overflow/);
   assert.match(styles, /\.modal-backdrop\s*\{[^}]*position:fixed/);
   assert.match(styles, /\.modal-backdrop\s*\{[^}]*z-index:1000/);
   assert.match(styles, /\.case-modal-backdrop\s*\{[^}]*place-items:center/);
@@ -141,8 +142,11 @@ test("routes intake screening to student affairs before team assignment", async 
   assert.match(dashboard, /อนุมัติและมอบหมาย/);
   assert.match(dashboard, /assignees: pendingTeam/);
   assert.match(dashboard, /leadAssignee/);
-  assert.match(modal, /ข้อความนี้เป็นบันทึกภายใน/);
+  assert.match(modal, /สรุปนี้จะแสดงในไทม์ไลน์ของเคส/);
+  assert.match(modal, /ต่างจากบันทึกภายใน/);
   assert.match(modal, /นักเรียนไม่เห็นข้อความนี้/);
+  assert.match(dashboard, /คนที่เลือก/);
+  assert.match(dashboard, /คนแรกที่เลือกจะเป็นผู้รับผิดชอบหลักอัตโนมัติ/);
   assert.match(caseApi, /case_assignments/);
   assert.match(caseApi, /AFFAIRS_REVIEW>IN_PROGRESS/);
   assert.match(caseApi, /ASSIGN_CASE_TEAM/);
@@ -344,12 +348,25 @@ test("allows staff to edit an existing internal note and collapses the editor af
   assert.match(dashboard, /แก้ไขบันทึกของ/);
   assert.match(dashboard, /noteId: editingNoteId/);
   assert.match(dashboard, /setNoteEditorOpen\(false\)/);
+  assert.match(dashboard, /ไม่เปลี่ยนสถานะและไม่ใช่คำสั่งส่งต่อ/);
+  assert.match(dashboard, /จะแสดงในไทม์ไลน์/);
   assert.match(caseRoute, /UPDATE case_notes SET note=\?/);
   assert.match(caseRoute, /WHERE id=\? AND case_id=\?/);
   assert.match(caseRoute, /แก้ไขบันทึกภายใน/);
   assert.match(dashboard, /item\.is_editable/);
   assert.match(caseRoute, /UPDATE case_notes SET is_editable=0/);
   assert.match(caseRoute, /AND is_editable=1/);
+});
+
+test("locks severity after intake sends the case forward", async () => {
+  const [dashboard, caseRoute] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /!\["NEW", "REOPENED"\]\.includes\(String\(selected\.case\.status\)\)/);
+  assert.match(dashboard, /ยืนยันแล้วและล็อกอัตโนมัติหลังส่งต่อเคส/);
+  assert.match(caseRoute, /ระดับความสำคัญถูกยืนยันแล้วหลังส่งต่อเคส/);
+  assert.match(caseRoute, /!\["NEW", "REOPENED"\]\.includes\(item\.status\)/);
 });
 
 test("supports role-based staff accounts and ordered case handoffs", async () => {
@@ -371,7 +388,10 @@ test("supports role-based staff accounts and ordered case handoffs", async () =>
   assert.match(caseApi, /case_handoffs/);
   assert.match(caseApi, /handoffReason/);
   assert.match(usersUi, /จัดการผู้ใช้งาน/);
-  assert.match(usersUi, /กำหนดบทบาท/);
+  assert.match(usersUi, /เพิ่มหรือถอนสิทธิ์/);
+  assert.match(usersUi, /ถอนสิทธิ์/);
+  assert.match(usersUi, /เพิ่มสิทธิ์/);
+  assert.match(usersUi, /ต้องเหลืออย่างน้อย 1 สิทธิ์/);
   assert.match(usersUi, /กำลังปรับบทบาทของบัญชี/);
   assert.match(usersUi, /สิทธิ์ระดับสูงสุด/);
   assert.match(updateUserApi, /await requireAdmin\(request\)/);
@@ -604,7 +624,7 @@ test("supports multiple roles on one staff account with one login", async () => 
   assert.match(usersApi, /assigned\.add\("TEACHER"\)/);
   assert.match(updateUserApi, /DELETE FROM staff_user_roles/);
   assert.match(updateUserApi, /ข้อมูลบัญชีหรือบทบาทไม่ถูกต้อง/);
-  assert.match(usersUi, /เลือกได้หลายรายการ/);
+  assert.match(usersUi, /บัญชีหนึ่งมีได้หลายบทบาท/);
   assert.match(usersUi, /form\.roles\.includes/);
   assert.match(schema, /staffUserRoles/);
   assert.match(migration, /CREATE TABLE `staff_user_roles`/);

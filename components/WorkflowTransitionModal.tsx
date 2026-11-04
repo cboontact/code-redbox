@@ -14,14 +14,11 @@ export function WorkflowTransitionModal({ fromLabel, toLabel, recipientLabel, cl
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && !saving) onClose();
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose, saving]);
@@ -35,8 +32,8 @@ export function WorkflowTransitionModal({ fromLabel, toLabel, recipientLabel, cl
       <div className="workflow-route"><b>{fromLabel}</b><FontAwesomeIcon icon={faArrowRight} /><b>{toLabel}</b></div>
       <form onSubmit={submit}>
         {recipientLabel && <div className="workflow-recipient"><FontAwesomeIcon icon={faUserShield} /><span><small>ส่งงานและคำสั่งถึง</small><b>{recipientLabel}</b></span></div>}
-        <div className="workflow-audience-note"><FontAwesomeIcon icon={faEyeSlash} /><span><b>ข้อความนี้เป็นบันทึกภายใน</b><small>ผู้ดูแลระบบและเจ้าหน้าที่หรือครูที่รับช่วงต่อเท่านั้นที่เห็น นักเรียนไม่เห็นข้อความนี้</small></span></div>
-        <label><span>{recipientLabel ? "คำสั่งหรือรายละเอียดสำหรับผู้รับช่วงต่อ (ถ้ามี)" : closing ? "สรุปผลก่อนปิดเคส (ถ้ามี)" : "เหตุผลหรือสรุปผลของขั้นตอนนี้ (ถ้ามี)"}</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={4} maxLength={1000} autoFocus placeholder={recipientLabel ? `พิมพ์สิ่งที่ต้องการให้ ${recipientLabel} ดำเนินการ หรือเว้นว่างได้` : closing ? "พิมพ์สรุปผล หรือเว้นว่างได้" : "พิมพ์รายละเอียดเพิ่มเติม หรือเว้นว่างได้"} /></label>
+        <div className="workflow-audience-note"><FontAwesomeIcon icon={faEyeSlash} /><span><b>สรุปนี้จะแสดงในไทม์ไลน์ของเคส</b><small>ใช้บอกเหตุผล ผลการพิจารณา หรือคำสั่งแก่ผู้รับช่วงต่อ ต่างจากบันทึกภายในที่ใช้จดข้อมูลระหว่างทำงาน นักเรียนไม่เห็นข้อความนี้</small></span></div>
+        <label><span>{recipientLabel ? "สรุปขั้นตอนหรือคำสั่งสำหรับผู้รับช่วงต่อ (ถ้ามี)" : closing ? "สรุปผลก่อนปิดเคส (ถ้ามี)" : "เหตุผลหรือสรุปผลของขั้นตอนนี้ (ถ้ามี)"}</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={4} maxLength={1000} autoFocus placeholder={recipientLabel ? `พิมพ์สิ่งที่ต้องการให้ ${recipientLabel} ดำเนินการ หรือเว้นว่างได้` : closing ? "พิมพ์สรุปผล หรือเว้นว่างได้" : "พิมพ์รายละเอียดเพิ่มเติม หรือเว้นว่างได้"} /></label>
         <label><span><FontAwesomeIcon icon={faClock} /> กำหนดติดตาม (ถ้ามี)</span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
         <footer><button type="button" className="button secondary" onClick={onClose} disabled={saving}>ยกเลิก</button><button className="button primary" disabled={saving}>{saving ? (closing ? "กำลังปิดเคส..." : "กำลังส่งต่อ...") : closing ? "ยืนยันปิดเคส" : reassignment ? "ยืนยันส่งต่อผู้รับผิดชอบ" : recipientLabel ? "ยืนยันมอบหมายและส่งต่อ" : "ยืนยันส่งต่อ"}</button></footer>
       </form>

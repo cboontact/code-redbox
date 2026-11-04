@@ -1486,6 +1486,7 @@ function TeamAssigneePicker({
   }, []);
   const roleLabels: Record<string, string> = { SUPER_ADMIN: "แอดมินระบบ", STUDENT_AFFAIRS: "ครูกิจการนักเรียน", LEVEL_HEAD: "หัวหน้าระดับ", ADVISOR: "ครูที่ปรึกษา", TEACHER: "ครูผู้ดำเนินการ", CASE_OFFICER: "ผู้รับผิดชอบเดิม" };
   const filtered = items.filter((item) => `${item.display_name} ${item.username} ${roleLabels[item.role] ?? item.role}`.toLocaleLowerCase("th-TH").includes(query.trim().toLocaleLowerCase("th-TH"))).slice(0, 20);
+  const leadItem = items.find((item) => item.username === lead);
   function toggle(username: string) {
     const next = selected.includes(username) ? selected.filter((value) => value !== username) : [...selected, username];
     const nextLead = next.length === 0 ? "" : next.includes(lead) ? lead : next[0];
@@ -1493,6 +1494,7 @@ function TeamAssigneePicker({
   }
   return <div className="team-assignee-picker">
     <div className="assignee-input-wrap"><FontAwesomeIcon icon={faMagnifyingGlass} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ค้นหาหัวหน้าระดับ ครูที่ปรึกษา หรือครูคนอื่น" disabled={disabled} /></div>
+    <div className={`team-selection-summary ${selected.length ? "has-selection" : ""}`}><span><b>{selected.length}</b> คนที่เลือก</span><small>{leadItem ? `ผู้รับผิดชอบหลัก: ${leadItem.display_name}` : "ยังไม่ได้เลือกผู้รับผิดชอบหลัก"}</small></div>
     {error ? <p className="assignee-error">{error}</p> : <div className="team-assignee-options">{filtered.map((item) => {
       const checked = selected.includes(item.username);
       return <div className={checked ? "selected" : ""} key={item.username}>
@@ -1500,7 +1502,7 @@ function TeamAssigneePicker({
         {checked && <label><input type="radio" name="lead-assignee" checked={lead === item.username} onChange={() => onChange(selected, item.username)} /> ผู้รับผิดชอบหลัก</label>}
       </div>;
     })}</div>}
-    <small className="field-help">เลือกได้หลายคน และกำหนดผู้รับผิดชอบหลักหนึ่งคน</small>
+    <small className="field-help">เลือกได้หลายคน โดยคนแรกที่เลือกจะเป็นผู้รับผิดชอบหลักอัตโนมัติ และสามารถเปลี่ยนเป็นคนอื่นได้</small>
   </div>;
 }
 
@@ -1606,17 +1608,21 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       })
       .catch(() => undefined);
   }, []);
+  const selectedCaseNumber = selected?.case.case_number;
+  useEffect(() => {
+    if (!selectedCaseNumber) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [selectedCaseNumber]);
   useEffect(() => {
     if (!selected) return;
-    const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
       const childModalOpen = Boolean(previewFile || transitionTarget || reassignmentOpen || resetPasswordOpen || deleteCaseOpen);
       if (event.key === "Escape" && !childModalOpen && !saving) setSelected(null);
     };
-    document.body.style.overflow = "hidden";
     document.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [selected, previewFile, transitionTarget, reassignmentOpen, resetPasswordOpen, deleteCaseOpen, saving]);
@@ -2145,9 +2151,8 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       ขั้นตอนปัจจุบัน: {statusLabels[String(selected.case.status)]}
                     </b>
                     <small>
-                      คำสั่งและเหตุผลที่กรอกตอนส่งต่อเป็นบันทึกภายใน
-                      เฉพาะเจ้าหน้าที่และครูที่เกี่ยวข้องเท่านั้นที่เห็น
-                      นักเรียนจะไม่เห็นข้อความนี้
+                      สรุปหรือเหตุผลที่กรอกตอนเปลี่ยนขั้นตอนจะแสดงในไทม์ไลน์
+                      เพื่อบอกผู้รับช่วงว่าเกิดอะไรขึ้น ส่วนบันทึกภายในใช้จดข้อมูลระหว่างทำงาน
                     </small>
                   </div>
                 </div>
@@ -2201,7 +2206,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   <select
                     value={selected.case.severity}
                     onChange={(e) => updateCase({ severity: e.target.value })}
-                    disabled={saving || !(hasRole("SUPER_ADMIN") || hasRole("INTAKE"))}
+                    disabled={saving || !["NEW", "REOPENED"].includes(String(selected.case.status)) || !(hasRole("SUPER_ADMIN") || hasRole("INTAKE"))}
                   >
                     {Object.entries(severityLabels).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -2209,6 +2214,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       </option>
                     ))}
                   </select>
+                  <small className="field-help">{["NEW", "REOPENED"].includes(String(selected.case.status)) ? "เจ้าหน้าที่รับเรื่องกำหนดระดับก่อนส่งต่อ" : "ยืนยันแล้วและล็อกอัตโนมัติหลังส่งต่อเคส"}</small>
                 </label>
                 {["NEW", "REOPENED"].includes(String(selected.case.status)) && (hasRole("INTAKE") || hasRole("SUPER_ADMIN")) && (
                   <div className="workflow-decision-actions intake-routing-actions">
@@ -2414,6 +2420,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </button>
                   )}
                 </div>
+                <p className="internal-note-help">ใช้จดข้อมูลประกอบระหว่างดำเนินงาน ไม่เปลี่ยนสถานะและไม่ใช่คำสั่งส่งต่อ</p>
                 {noteEditorOpen && (
                   <div className="note-composer">
                     <textarea
