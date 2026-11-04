@@ -26,7 +26,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const actor = await requireAdmin(request);
     const session = await getAdminSession(request);
     const input = updateSchema.safeParse(await request.json());
-    if (!input.success || Object.keys(input.data).length === 0) return jsonError("ไม่มีข้อมูลสำหรับบันทึก");
+    if (!input.success) return jsonError("ข้อมูลบัญชีหรือบทบาทไม่ถูกต้อง กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง");
+    if (Object.keys(input.data).length === 0) return jsonError("ไม่มีข้อมูลสำหรับบันทึก");
     const db = await ensureDatabase();
     const { id } = await context.params;
     const current = await db.prepare("SELECT id,username,role,advisor_id,is_active FROM staff_users WHERE id=?").bind(id).first<{ id: string; username: string; role: StaffRole; advisor_id: string | null; is_active: number }>();

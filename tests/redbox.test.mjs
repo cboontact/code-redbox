@@ -586,7 +586,10 @@ test("supports multiple roles on one staff account with one login", async () => 
   assert.match(auth, /roles: StaffRole\[\]/);
   assert.match(auth, /sessionHasAnyRole/);
   assert.match(usersApi, /roles: rolesSchema/);
+  assert.match(usersApi, /assigned\.delete\("CASE_OFFICER"\)/);
+  assert.match(usersApi, /assigned\.add\("TEACHER"\)/);
   assert.match(updateUserApi, /DELETE FROM staff_user_roles/);
+  assert.match(updateUserApi, /ข้อมูลบัญชีหรือบทบาทไม่ถูกต้อง/);
   assert.match(usersUi, /เลือกได้หลายรายการ/);
   assert.match(usersUi, /form\.roles\.includes/);
   assert.match(schema, /staffUserRoles/);

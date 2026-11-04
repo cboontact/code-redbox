@@ -37,6 +37,10 @@ export async function GET(request: Request) {
       ORDER BY su.is_active DESC,su.display_name`).all<Record<string, unknown>>();
     const users = results.map((user) => {
       const assigned = new Set(String(user.role_values ?? user.role).split("|").filter(Boolean));
+      if (assigned.has("CASE_OFFICER")) {
+        assigned.delete("CASE_OFFICER");
+        assigned.add("TEACHER");
+      }
       return { ...user, roles: rolePriority.filter((role) => assigned.has(role)), role_values: undefined };
     });
     return Response.json({ users });
