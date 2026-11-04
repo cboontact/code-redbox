@@ -92,6 +92,10 @@ test("supports many teachers per room and many rooms per teacher without replaci
   assert.match(advisorsUi, /ค้นหาชื่อ อีเมล โทรศัพท์ หรือห้อง/);
   assert.match(advisorsUi, /ทุกระดับชั้น/);
   assert.match(advisorsUi, /ทุกห้อง/);
+  assert.match(advisorsUi, /advisor-primary-line/);
+  assert.match(advisorsUi, /บัญชี @/);
+  assert.doesNotMatch(advisorsUi, /Username: \{advisor\.source_username\}/);
+  assert.doesNotMatch(advisorsUi, /นักเรียน \{item\.student_count\} คน/);
   assert.doesNotMatch(advisorsUi, /ครูที่ปรึกษาคนที่ 1|ครูที่ปรึกษาคนที่ 2|ได้ 2 คน/);
 });
 

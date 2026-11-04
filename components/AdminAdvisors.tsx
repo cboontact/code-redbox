@@ -268,13 +268,14 @@ export function AdminAdvisors() {
               <article className="advisor-item" key={advisor.id}>
                 <span className="advisor-avatar">{advisor.first_name.slice(0, 1)}</span>
                 <div className="advisor-item-body">
-                  <h3>{advisor.prefix}{advisor.first_name} {advisor.last_name}</h3>
-                  {advisor.special_role && <div className="advisor-special-role">{advisor.special_role}</div>}
-                  <div className="advisor-room-list">
-                    {own.length ? own.map((item) => <span key={item.id}>{item.level}/{item.classroom} · นักเรียน {item.student_count} คน</span>) : <span className="empty">ยังไม่ได้กำหนดห้อง</span>}
+                  <div className="advisor-primary-line">
+                    <h3>{advisor.prefix}{advisor.first_name} {advisor.last_name}</h3>
+                    {advisor.special_role && <span className="advisor-special-role">{advisor.special_role}</span>}
+                    <div className="advisor-room-list">
+                      {own.length ? own.map((item) => <span key={item.id}>{item.level}/{item.classroom} · {item.student_count} คน</span>) : <span className="empty">ยังไม่ได้กำหนดห้อง</span>}
+                    </div>
                   </div>
                   <div className="advisor-contact-list">
-                    {advisor.source_username && <span>Username: {advisor.source_username}</span>}
                     {advisor.email && <span><FontAwesomeIcon icon={faEnvelope} /> {advisor.email}</span>}
                     {advisor.phone && <span><FontAwesomeIcon icon={faPhone} /> {advisor.phone}</span>}
                     {!advisor.email && !advisor.phone && <span>ไม่มีข้อมูลติดต่อ</span>}
