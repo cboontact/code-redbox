@@ -1357,7 +1357,7 @@ function AssigneeCombobox({
   type Assignee = {
     username: string;
     display_name: string;
-    role: "SUPER_ADMIN" | "STUDENT_AFFAIRS" | "LEVEL_HEAD" | "TEACHER" | "CASE_OFFICER" | "ADVISOR";
+    role: "SUPER_ADMIN" | "STUDENT_AFFAIRS" | "LEVEL_HEAD" | "ADVISOR" | "STAFF";
   };
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [loadError, setLoadError] = useState("");
@@ -1442,7 +1442,7 @@ function AssigneeCombobox({
                 <span>
                   <b>{item.display_name}</b>
                   <small>
-                    {item.role === "ADVISOR" ? "ครูที่ปรึกษา" : item.role === "SUPER_ADMIN" ? "แอดมินระบบ" : "ผู้รับผิดชอบเคส"}{" "}
+                    {item.role === "ADVISOR" ? "ครูที่ปรึกษา" : item.role === "SUPER_ADMIN" ? "แอมินระบบ" : item.role === "LEVEL_HEAD" ? "หัวหน้าระดับ" : item.role === "STUDENT_AFFAIRS" ? "ครูกิจการนักเรียน" : "บุคลากร"}{" "}
                     · @{item.username}
                   </small>
                 </span>
@@ -1485,7 +1485,7 @@ function TeamAssigneePicker({
       })
       .catch(() => setError("โหลดรายชื่อครูไม่สำเร็จ กดรีเฟรชแล้วลองอีกครั้ง"));
   }, []);
-  const roleLabels: Record<string, string> = { SUPER_ADMIN: "แอดมินระบบ", STUDENT_AFFAIRS: "ครูกิจการนักเรียน", LEVEL_HEAD: "หัวหน้าระดับ", ADVISOR: "ครูที่ปรึกษา", TEACHER: "ครูผู้ดำเนินการ", CASE_OFFICER: "ผู้รับผิดชอบเดิม" };
+  const roleLabels: Record<string, string> = { SUPER_ADMIN: "แอมินระบบ", STUDENT_AFFAIRS: "ครูกิจการนักเรียน", LEVEL_HEAD: "หัวหน้าระดับ", ADVISOR: "ครูที่ปรึกษา", STAFF: "บุคลากร" };
   const filtered = items.filter((item) => `${item.display_name} ${item.username} ${roleLabels[item.role] ?? item.role}`.toLocaleLowerCase("th-TH").includes(query.trim().toLocaleLowerCase("th-TH"))).slice(0, 20);
   const leadItem = items.find((item) => item.username === lead);
   function toggle(username: string) {
@@ -1494,7 +1494,7 @@ function TeamAssigneePicker({
     onChange(next, nextLead);
   }
   return <div className="team-assignee-picker">
-    <div className="assignee-input-wrap"><FontAwesomeIcon icon={faMagnifyingGlass} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ค้นหาหัวหน้าระดับ ครูที่ปรึกษา หรือครูคนอื่น" disabled={disabled} /></div>
+    <div className="assignee-input-wrap"><FontAwesomeIcon icon={faMagnifyingGlass} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ค้นหาชื่อบุคลากร" disabled={disabled} /></div>
     <div className={`team-selection-summary ${selected.length ? "has-selection" : ""}`}><span><b>{selected.length}</b> คนที่เลือก</span><small>{leadItem ? `ผู้รับผิดชอบหลัก: ${leadItem.display_name}` : "ยังไม่ได้เลือกผู้รับผิดชอบหลัก"}</small></div>
     {error ? <p className="assignee-error">{error}</p> : <div className="team-assignee-options">{filtered.map((item) => {
       const checked = selected.includes(item.username);

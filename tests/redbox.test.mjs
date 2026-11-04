@@ -235,7 +235,7 @@ test("shows each case title beneath its case number without adding a crowded col
   assert.match(styles, /\.case-list-title\s*\{[^}]*white-space:nowrap/);
 });
 
-test("offers searchable active teachers for multi-person assignment", async () => {
+test("offers every active staff account for case-specific multi-person assignment", async () => {
   const [app, api, caseApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/assignees/route.ts", import.meta.url), "utf8"),
@@ -245,9 +245,10 @@ test("offers searchable active teachers for multi-person assignment", async () =
   assert.match(app, /TeamAssigneePicker/);
   assert.match(app, /พิมพ์ชื่อครูหรือเจ้าหน้าที่/);
   assert.match(app, /role="combobox"/);
-  assert.match(api, /'SUPER_ADMIN','STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'/);
-  assert.match(api, /is_active=1/);
-  assert.match(caseApi, /role IN \('SUPER_ADMIN','STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'\)/);
+  assert.match(api, /WHERE su\.is_active=1/);
+  assert.doesNotMatch(api, /sur\.role IN \('SUPER_ADMIN','STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'\)/);
+  assert.match(caseApi, /WHERE su\.is_active=1 AND su\.username IN/);
+  assert.doesNotMatch(caseApi, /sur\.role IN \('SUPER_ADMIN','STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'\)/);
   assert.match(caseApi, /assignment_role/);
 });
 
@@ -417,7 +418,7 @@ test("supports role-based staff accounts and ordered case handoffs", async () =>
   assert.match(usersUi, /เพิ่มหรือถอนสิทธิ์/);
   assert.match(usersUi, /ถอนสิทธิ์/);
   assert.match(usersUi, /เพิ่มสิทธิ์/);
-  assert.match(usersUi, /ครูที่ปรึกษาเป็นสิทธิ์พื้นฐาน/);
+  assert.match(usersUi, /ผู้ดำเนินการเกิดจากการถูกมอบหมายในแต่ละเคส/);
   assert.match(usersUi, /กำลังปรับบทบาทของบัญชี/);
   assert.match(usersUi, /สิทธิ์ระดับสูงสุด/);
   assert.match(updateUserApi, /await requireAdmin\(request\)/);
@@ -702,7 +703,7 @@ test("shows role tabs and grants anonymous student identity access per user", as
   assert.doesNotMatch(usersUi, /บทบาทในบัญชีเดียว/);
   assert.doesNotMatch(usersUi, /ครูคนนี้ดูแลห้องใด/);
   assert.doesNotMatch(usersUi, /เลือกชื่อครูเพื่อใช้ข้อมูลห้องที่ดูแล/);
-  assert.match(usersUi, /ระบบจับคู่ห้องที่ดูแลจาก Username อัตโนมัติ/);
+  assert.match(usersUi, /ครูที่ปรึกษาผูกจากห้องที่ดูแลอัตโนมัติ/);
   assert.match(usersUi, /advisorRoomLabel/);
   assert.match(usersUi, /advisor\.source_username/);
   assert.match(usersUi, /ยืนยันลบบัญชี/);
@@ -726,7 +727,7 @@ test("shows role tabs and grants anonymous student identity access per user", as
   assert.match(migration, /can_view_student_identity/);
 });
 
-test("treats advisor access as the automatic base role for every staff account", async () => {
+test("keeps advisor room access automatic without exposing advisor or assignee as managed roles", async () => {
   const [usersUi, usersApi, updateUserApi, accountLink, bootstrap] = await Promise.all([
     readFile(new URL("../components/AdminUsers.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8"),
@@ -735,10 +736,9 @@ test("treats advisor access as the automatic base role for every staff account",
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
   ]);
   assert.match(usersUi, /roles: \["ADVISOR"\]/);
-  assert.match(usersUi, /if \(role === "ADVISOR"\) return/);
-  assert.match(usersUi, /สิทธิ์พื้นฐานของบุคลากรทุกคน/);
-  assert.match(usersUi, /tabRole\.value !== "ADVISOR"/);
-  assert.match(usersUi, /removingRole\.role === "ADVISOR"/);
+  assert.doesNotMatch(usersUi, /value: "TEACHER", label: "ครูผู้ดำเนินการ"/);
+  assert.doesNotMatch(usersUi, /value: "ADVISOR", label: "ครูที่ปรึกษา"/);
+  assert.match(usersUi, /ครูที่ปรึกษาผูกจากห้องที่ดูแลอัตโนมัติ/);
   for (const route of [usersApi, updateUserApi]) {
     assert.match(route, /includeAdvisorRole/);
     assert.match(route, /resolveAdvisorAccountLink/);

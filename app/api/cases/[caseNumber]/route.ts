@@ -127,8 +127,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       if (!unique.includes(lead)) return jsonError("ผู้รับผิดชอบหลักต้องอยู่ในทีมที่เลือก");
       const placeholders = unique.map(() => "?").join(",");
       const result = await db.prepare(`SELECT su.id,su.username,su.display_name FROM staff_users su
-        WHERE su.is_active=1 AND su.username IN (${placeholders}) AND EXISTS (
-        SELECT 1 FROM staff_user_roles sur WHERE sur.user_id=su.id AND sur.role IN ('SUPER_ADMIN','STUDENT_AFFAIRS','LEVEL_HEAD','TEACHER','ADVISOR','CASE_OFFICER'))`).bind(...unique).all<{ id: string; username: string; display_name: string }>();
+        WHERE su.is_active=1 AND su.username IN (${placeholders})`).bind(...unique).all<{ id: string; username: string; display_name: string }>();
       assigneeRows = result.results;
       if (assigneeRows.length !== unique.length) return jsonError("มีรายชื่อผู้รับผิดชอบที่ไม่พร้อมใช้งาน", 400);
       input.data.leadAssignee = lead;
