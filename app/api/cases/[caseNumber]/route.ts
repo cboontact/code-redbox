@@ -82,7 +82,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     const session = await requireCaseSession(request);
     const actor = session.username;
     const input = updateSchema.safeParse(await request.json());
-    if (!input.success || Object.keys(input.data).length === 0) return jsonError("ไม่มีข้อมูลสำหรับบันทึก");
+    if (!input.success) return jsonError("ข้อมูลการดำเนินการไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง");
+    if (Object.keys(input.data).length === 0) return jsonError("ไม่มีข้อมูลสำหรับบันทึก");
+    if (input.data.noteId && !input.data.note) return jsonError("กรุณาระบุข้อความบันทึกที่ต้องการแก้ไข");
     const db = await ensureDatabase();
     const { caseNumber } = await context.params;
     const item = await db.prepare("SELECT c.id,c.status,c.severity,c.assigned_to,c.exclusive_reviewer_username,c.is_anonymous,s.level,s.classroom FROM cases c JOIN students s ON s.id=c.student_id WHERE c.case_number=?").bind(caseNumber).first<CaseItem>();
@@ -109,7 +111,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     const requestedStatus = input.data.status;
     if (requestedStatus && requestedStatus !== item.status) {
       const edge = `${item.status}>${requestedStatus}`;
-      const intakeEdges = new Set(["NEW>AFFAIRS_REVIEW", "NEW>DEPUTY_REVIEW", "NEW>CLOSED", "REOPENED>AFFAIRS_REVIEW", "REOPENED>DEPUTY_REVIEW", "REOPENED>CLOSED", "INTAKE_REVIEW>CLOSED", "INTAKE_REVIEW>IN_PROGRESS", "SCREENING>AFFAIRS_REVIEW", "ASSIGNED>IN_PROGRESS", "ADMIN_REVIEW>CLOSED", "ADMIN_REVIEW>DIRECTOR_REVIEW", "PENDING_CLOSE>CLOSED", "RESOLVED>CLOSED", "CLOSED>REOPENED"]);
+      const intakeEdges = new Set(["NEW>AFFAIRS_REVIEW", "NEW>DEPUTY_REVIEW", "NEW>CLOSED", "REOPENED>AFFAIRS_REVIEW", "REOPENED>DEPUTY_REVIEW", "REOPENED>CLOSED", "INTAKE_REVIEW>CLOSED", "INTAKE_REVIEW>IN_PROGRESS", "SCREENING>AFFAIRS_REVIEW", "SCREENING>ASSIGNED", "ASSIGNED>IN_PROGRESS", "ADMIN_REVIEW>CLOSED", "ADMIN_REVIEW>DIRECTOR_REVIEW", "PENDING_CLOSE>CLOSED", "RESOLVED>CLOSED", "CLOSED>REOPENED"]);
       const affairsEdges = new Set(["AFFAIRS_REVIEW>IN_PROGRESS", "AFFAIRS_REVIEW>INTAKE_REVIEW"]);
       const teamEdges = new Set(["IN_PROGRESS>INTAKE_REVIEW", "DIRECTOR_ORDERED>IN_PROGRESS"]);
       const permitted = isSuper || (isIntake && intakeEdges.has(edge)) || (isAffairs && affairsEdges.has(edge)) || ((participant || isLead) && teamEdges.has(edge) && (requestedStatus !== "INTAKE_REVIEW" || isLead));

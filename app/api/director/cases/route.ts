@@ -5,7 +5,7 @@ import { jsonError } from "../../../../lib/security";
 export async function GET(request: Request) {
   try {
     const session = await getAdminSession(request);
-    if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "DEPUTY_DIRECTOR", "DIRECTOR"])) return jsonError("ไม่มีสิทธิ์เข้าถึง", 401);
+    if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "DEPUTY_DIRECTOR", "DIRECTOR"])) return jsonError("ไม่มีสิทธิ์เข้าถึง", session ? 403 : 401);
     const db = await ensureDatabase();
     const statuses = sessionHasRole(session, "SUPER_ADMIN")
       ? ["DEPUTY_REVIEW", "DIRECTOR_REVIEW"]

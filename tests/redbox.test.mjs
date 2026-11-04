@@ -152,6 +152,24 @@ test("routes intake screening to student affairs before team assignment", async 
   assert.match(caseApi, /ASSIGN_CASE_TEAM/);
 });
 
+test("keeps legacy screening and assignment transitions aligned between the interface and API", async () => {
+  const [dashboard, caseApi] = await Promise.all([
+    readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  for (const edge of ["SCREENING>ASSIGNED", "ASSIGNED>IN_PROGRESS"]) {
+    assert.match(dashboard, new RegExp(edge));
+    assert.match(caseApi, new RegExp(edge));
+  }
+});
+
+test("rejects invalid and empty case updates with actionable messages", async () => {
+  const caseApi = await readFile(new URL("../app/api/cases/[caseNumber]/route.ts", import.meta.url), "utf8");
+  assert.match(caseApi, /ข้อมูลการดำเนินการไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง/);
+  assert.match(caseApi, /Object\.keys\(input\.data\)\.length === 0/);
+  assert.match(caseApi, /กรุณาระบุข้อความบันทึกที่ต้องการแก้ไข/);
+});
+
 test("shows explicit team completion, intake review, and case closing actions", async () => {
   const [dashboard, modal] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
@@ -546,6 +564,14 @@ test("allows director actions without typing an accompanying message", async () 
   assert.doesNotMatch(directorApi, /กรุณาระบุคำสั่งและรายละเอียดให้ครบ/);
 });
 
+test("distinguishes unauthenticated and unauthorized executive requests", async () => {
+  const routes = await Promise.all([
+    readFile(new URL("../app/api/director/cases/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/director/cases/[caseNumber]/route.ts", import.meta.url), "utf8"),
+  ]);
+  for (const route of routes) assert.match(route, /session \? 403 : 401/);
+});
+
 test("uses a new private hashed tracking password for every submitted case", async () => {
   const [dashboard, casesApi] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
@@ -565,6 +591,15 @@ test("uses a new private hashed tracking password for every submitted case", asy
   assert.match(dashboard, /resetTrackingPassword/);
   assert.match(casesApi, /SELECT c\.case_number,c\.status,c\.created_at,c\.tracking_password_hash,cc\.name category_name/);
   assert.doesNotMatch(casesApi, /SELECT c\.case_number,c\.title,c\.status/);
+});
+
+test("uses slow peppered password hashing while retaining legacy verification", async () => {
+  const password = await readFile(new URL("../lib/password.ts", import.meta.url), "utf8");
+  assert.match(password, /passwordHashIterations = 210_000/);
+  assert.match(password, /pbkdf2-sha256/);
+  assert.match(password, /sessionSecret\(\).*password/);
+  assert.match(password, /fields\[0\] === "hmac-sha256"/);
+  assert.match(password, /algorithm !== "pbkdf2"/);
 });
 
 test("never returns password or upload token hashes in staff case responses", async () => {
@@ -628,6 +663,14 @@ test("supports multiple roles on one staff account with one login", async () => 
   assert.match(usersUi, /form\.roles\.includes/);
   assert.match(schema, /staffUserRoles/);
   assert.match(migration, /CREATE TABLE `staff_user_roles`/);
+});
+
+test("uses every role on an account when showing workflow actions", async () => {
+  const dashboard = await readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8");
+  assert.match(dashboard, /function availableStatusEntries\(current: string, assignedRoles: string \| string\[\]\)/);
+  assert.match(dashboard, /rolesForAccount\.some/);
+  assert.match(dashboard, /availableStatusEntries\([\s\S]*?currentRoles/);
+  assert.doesNotMatch(dashboard, /\["SUPER_ADMIN", "INTAKE"\]\.includes\(currentRole\)/);
 });
 
 test("shows role tabs and grants anonymous student identity access per user", async () => {

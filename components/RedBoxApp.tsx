@@ -141,6 +141,10 @@ const dashboardStatusFilters = {
   review: ["INTAKE_REVIEW", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "PENDING_CLOSE"],
   closed: ["RESOLVED", "CLOSED"],
 } as const satisfies Record<string, readonly CaseStatus[]>;
+type DashboardStatusFilter = keyof typeof dashboardStatusFilters;
+function matchesDashboardStatus(filter: DashboardStatusFilter, status: CaseStatus) {
+  return (dashboardStatusFilters[filter] as readonly CaseStatus[]).includes(status);
+}
 const severityLabels: Record<string, string> = {
   WATCH: "เฝ้าระวัง",
   MODERATE: "เสี่ยงปานกลาง",
@@ -148,7 +152,7 @@ const severityLabels: Record<string, string> = {
   CRITICAL: "วิกฤต",
 };
 
-function availableStatusEntries(current: string, role: string) {
+function availableStatusEntries(current: string, assignedRoles: string | string[]) {
   const edges: Record<string, string[]> = {
     NEW: ["AFFAIRS_REVIEW", "DEPUTY_REVIEW", "CLOSED"],
     AFFAIRS_REVIEW: ["IN_PROGRESS", "INTAKE_REVIEW"],
@@ -168,33 +172,30 @@ function availableStatusEntries(current: string, role: string) {
       "NEW>AFFAIRS_REVIEW", "NEW>DEPUTY_REVIEW", "NEW>CLOSED",
       "REOPENED>AFFAIRS_REVIEW", "REOPENED>DEPUTY_REVIEW", "REOPENED>CLOSED",
       "INTAKE_REVIEW>IN_PROGRESS", "INTAKE_REVIEW>CLOSED",
-      "NEW>ASSIGNED",
       "SCREENING>ASSIGNED",
+      "ASSIGNED>IN_PROGRESS",
       "ADMIN_REVIEW>DIRECTOR_REVIEW",
       "ADMIN_REVIEW>CLOSED",
       "PENDING_CLOSE>CLOSED",
       "RESOLVED>CLOSED",
-      "REOPENED>ASSIGNED",
     ],
     STUDENT_AFFAIRS: ["AFFAIRS_REVIEW>IN_PROGRESS", "AFFAIRS_REVIEW>INTAKE_REVIEW", "IN_PROGRESS>INTAKE_REVIEW"],
     LEVEL_HEAD: ["IN_PROGRESS>INTAKE_REVIEW"],
     TEACHER: ["IN_PROGRESS>INTAKE_REVIEW"],
     CASE_OFFICER: [
       "ASSIGNED>IN_PROGRESS",
-      "IN_PROGRESS>ADMIN_REVIEW",
       "DIRECTOR_ORDERED>IN_PROGRESS",
     ],
     ADVISOR: [
       "ASSIGNED>IN_PROGRESS",
-      "IN_PROGRESS>ADMIN_REVIEW",
       "DIRECTOR_ORDERED>IN_PROGRESS",
     ],
   };
-  const next = (edges[current] ?? []).filter(
-    (status) =>
-      role === "SUPER_ADMIN" ||
-      roleEdges[role]?.includes(`${current}>${status}`),
-  );
+  const rolesForAccount = Array.isArray(assignedRoles) ? assignedRoles : [assignedRoles];
+  const next = (edges[current] ?? []).filter((status) => {
+    const edge = `${current}>${status}`;
+    return rolesForAccount.includes("SUPER_ADMIN") || rolesForAccount.some((role) => roleEdges[role]?.includes(edge));
+  });
   return [current, ...next].map(
     (status) => [status, statusLabels[status] ?? status] as const,
   );
@@ -1670,7 +1671,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
     }
   }
   async function deleteCase() {
-    if (!selected || currentRole !== "SUPER_ADMIN") return;
+    if (!selected || !hasRole("SUPER_ADMIN")) return;
     setSaving(true);
     try {
       const response = await fetch(`/api/cases/${selected.case.case_number}`, {
@@ -1691,12 +1692,12 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const counts = useMemo(
     () => ({
       all: cases.length,
-      new: cases.filter((c) => dashboardStatusFilters.new.includes(c.status)).length,
-      pending: cases.filter((c) => dashboardStatusFilters.pending.includes(c.status)).length,
-      active: cases.filter((c) => dashboardStatusFilters.active.includes(c.status)).length,
-      review: cases.filter((c) => dashboardStatusFilters.review.includes(c.status)).length,
+      new: cases.filter((c) => matchesDashboardStatus("new", c.status)).length,
+      pending: cases.filter((c) => matchesDashboardStatus("pending", c.status)).length,
+      active: cases.filter((c) => matchesDashboardStatus("active", c.status)).length,
+      review: cases.filter((c) => matchesDashboardStatus("review", c.status)).length,
       immediate: cases.filter((c) => c.requires_immediate_review).length,
-      closed: cases.filter((c) => dashboardStatusFilters.closed.includes(c.status)).length,
+      closed: cases.filter((c) => matchesDashboardStatus("closed", c.status)).length,
     }),
     [cases],
   );
@@ -1705,7 +1706,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       ? cases
       : quickFilter === "immediate"
         ? cases.filter((item) => item.requires_immediate_review)
-        : cases.filter((item) => dashboardStatusFilters[quickFilter].includes(item.status));
+        : cases.filter((item) => matchesDashboardStatus(quickFilter, item.status));
   const selectedStatus = String(selected?.case.status ?? "");
   const hasRole = (role: string) => currentRole === "SUPER_ADMIN" || currentRoles.includes("SUPER_ADMIN") || currentRole === role || currentRoles.includes(role);
   const isCurrentAssignee = Boolean(
@@ -2158,7 +2159,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 </div>
                 {availableStatusEntries(
                   String(selected.case.status),
-                  currentRole,
+                  currentRoles,
                 ).length > 1 ? (
                   <div className="workflow-next-step">
                     <FontAwesomeIcon icon={faArrowRight} />
@@ -2266,7 +2267,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   </label>
                 )}
                 {selected.case.status === "SCREENING" &&
-                  ["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
+                  (hasRole("SUPER_ADMIN") || hasRole("INTAKE")) && (
                     <>
                       <button
                         type="button"
@@ -2279,7 +2280,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                           ? `2. คัดกรองและมอบหมายให้ ${pendingAssigneeName}`
                           : "2. เลือกผู้รับผิดชอบก่อนส่งต่อ"}
                       </button>
-                      {currentRole === "SUPER_ADMIN" && currentUsername && (
+                      {hasRole("SUPER_ADMIN") && currentUsername && (
                         <button
                           type="button"
                           className="button secondary wide workflow-submit admin-self-assign"
@@ -2297,7 +2298,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </>
                 )}
                 {selected.case.status === "ASSIGNED" &&
-                  availableStatusEntries("ASSIGNED", currentRole).some(
+                  availableStatusEntries("ASSIGNED", currentRoles).some(
                     ([value]) => value === "IN_PROGRESS",
                   ) && (
                     <button
@@ -2310,7 +2311,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </button>
                   )}
                 {selected.case.status === "DIRECTOR_ORDERED" &&
-                  availableStatusEntries("DIRECTOR_ORDERED", currentRole).some(
+                  availableStatusEntries("DIRECTOR_ORDERED", currentRoles).some(
                     ([value]) => value === "IN_PROGRESS",
                   ) && (
                     <button
@@ -2323,7 +2324,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </button>
                   )}
                 {selected.case.status === "ADMIN_REVIEW" &&
-                  ["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
+                  (hasRole("SUPER_ADMIN") || hasRole("INTAKE")) && (
                     <div className="workflow-decision-actions">
                       <button
                         type="button"
@@ -2344,7 +2345,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </div>
                   )}
                 {selected.case.status === "PENDING_CLOSE" &&
-                  ["SUPER_ADMIN", "INTAKE"].includes(currentRole) && (
+                  (hasRole("SUPER_ADMIN") || hasRole("INTAKE")) && (
                     <button
                       type="button"
                       className="button primary wide workflow-submit close-case-button"
@@ -2355,7 +2356,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </button>
                   )}
                 {selected.case.status === "RESOLVED" &&
-                  availableStatusEntries("RESOLVED", currentRole).some(
+                  availableStatusEntries("RESOLVED", currentRoles).some(
                     ([value]) => value === "CLOSED",
                   ) && (
                     <button
@@ -2367,7 +2368,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <FontAwesomeIcon icon={faCheck} /> ยืนยันปิดเคส
                     </button>
                   )}
-                {currentRole === "SUPER_ADMIN" &&
+                {hasRole("SUPER_ADMIN") &&
                   !(isCurrentAssignee && selected.case.status === "IN_PROGRESS") &&
                   !["PENDING_CLOSE", "RESOLVED", "CLOSED"].includes(selected.case.status) && (
                     <div className="direct-close-action">
@@ -2386,7 +2387,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </div>
                   )}
                 {selected.case.status === "CLOSED" &&
-                  availableStatusEntries("CLOSED", currentRole).some(
+                  availableStatusEntries("CLOSED", currentRoles).some(
                     ([value]) => value === "REOPENED",
                   ) && (
                     <button
@@ -2521,7 +2522,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 ))}
               </div>
               </div>
-              {currentRole === "SUPER_ADMIN" && (
+              {hasRole("SUPER_ADMIN") && (
                 <section className="admin-tools-card">
                   <header>
                     <span>

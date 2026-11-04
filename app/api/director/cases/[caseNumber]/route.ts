@@ -13,7 +13,7 @@ const actionSchema = z.object({
 export async function GET(request: Request, context: { params: Promise<{ caseNumber: string }> }) {
   try {
     const session = await getAdminSession(request);
-    if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "DEPUTY_DIRECTOR", "DIRECTOR"])) return jsonError("ไม่มีสิทธิ์เข้าถึง", 401);
+    if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "DEPUTY_DIRECTOR", "DIRECTOR"])) return jsonError("ไม่มีสิทธิ์เข้าถึง", session ? 403 : 401);
     const db = await ensureDatabase();
     const { caseNumber } = await context.params;
     const statuses = sessionHasRole(session, "SUPER_ADMIN")
@@ -48,7 +48,7 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
 export async function PATCH(request: Request, context: { params: Promise<{ caseNumber: string }> }) {
   try {
     const session = await getAdminSession(request);
-    if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "DEPUTY_DIRECTOR", "DIRECTOR"])) return jsonError("ไม่มีสิทธิ์เข้าถึง", 401);
+    if (!session || !sessionHasAnyRole(session, ["SUPER_ADMIN", "DEPUTY_DIRECTOR", "DIRECTOR"])) return jsonError("ไม่มีสิทธิ์เข้าถึง", session ? 403 : 401);
     const input = actionSchema.safeParse(await request.json());
     if (!input.success) return jsonError("คำสั่งไม่ถูกต้อง");
     const db = await ensureDatabase();
