@@ -763,6 +763,14 @@ test("adds users directly from each role tab with a searchable multi-select moda
   assert.match(styles, /\.user-list-heading-actions/);
 });
 
+test("allows permission changes when an advisor record is already linked to another account", async () => {
+  const userApi = await readFile(new URL("../app/api/admin/users/[id]/route.ts", import.meta.url), "utf8");
+  assert.match(userApi, /let targetAdvisorId = current\.advisor_id/);
+  assert.match(userApi, /if \(!linked\) targetAdvisorId = resolvedAdvisorId/);
+  assert.doesNotMatch(userApi, /if \(linked\) return jsonError\("ครูที่ปรึกษาคนนี้มีบัญชีผู้ใช้งานแล้ว"/);
+  assert.doesNotMatch(userApi, /ไม่พบข้อมูลครูที่ปรึกษาที่ใช้ Username นี้/);
+});
+
 test("routes students from cboonta advisory rooms into an owner-only first review", async () => {
   const [casesApi, caseDetailApi, uploadsApi, exclusiveReview, dashboard, schema, migration] = await Promise.all([
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),

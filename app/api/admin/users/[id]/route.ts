@@ -47,10 +47,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       if ((count?.total ?? 0) <= 1) return jsonError("ระบบต้องมีแอดมินระบบอย่างน้อย 1 บัญชี", 409);
     }
 
-    const targetAdvisorId = await resolveAdvisorAccountLink(db, current.username, current.advisor_id ?? input.data.advisorId);
-    if (!targetAdvisorId) return jsonError("ไม่พบข้อมูลครูที่ปรึกษาที่ใช้ Username นี้ กรุณาเพิ่มข้อมูลครูที่ปรึกษาก่อนบันทึกบัญชี", 409);
-    const linked = await db.prepare("SELECT id FROM staff_users WHERE advisor_id=? AND id<>?").bind(targetAdvisorId, id).first();
-    if (linked) return jsonError("ครูที่ปรึกษาคนนี้มีบัญชีผู้ใช้งานแล้ว", 409);
+    const resolvedAdvisorId = await resolveAdvisorAccountLink(db, current.username, current.advisor_id ?? input.data.advisorId);
+    let targetAdvisorId = current.advisor_id;
+    if (!targetAdvisorId && resolvedAdvisorId) {
+      const linked = await db.prepare("SELECT id FROM staff_users WHERE advisor_id=? AND id<>?").bind(resolvedAdvisorId, id).first();
+      // การเพิ่มหรือถอนบทบาทต้องทำได้ แม้ข้อมูลครูที่ปรึกษาจะผูกกับบัญชีอื่นอยู่แล้ว
+      if (!linked) targetAdvisorId = resolvedAdvisorId;
+    }
 
     const updates: string[] = [];
     const values: Array<string | number | null> = [];
@@ -59,7 +62,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (input.data.isActive !== undefined) { updates.push("is_active=?"); values.push(input.data.isActive ? 1 : 0); }
     if (input.data.password) { updates.push("password_hash=?"); values.push(await hashPassword(input.data.password)); updates.push("must_change_password=1"); }
     if (input.data.canViewStudentIdentity !== undefined) { updates.push("can_view_student_identity=?"); values.push(input.data.canViewStudentIdentity ? 1 : 0); }
-    if (current.advisor_id !== targetAdvisorId || input.data.roles) { updates.push("advisor_id=?"); values.push(targetAdvisorId); }
+    if (current.advisor_id !== targetAdvisorId) { updates.push("advisor_id=?"); values.push(targetAdvisorId); }
 
     const statements: D1PreparedStatement[] = [];
     if (updates.length) statements.push(db.prepare(`UPDATE staff_users SET ${updates.join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(...values, id));
