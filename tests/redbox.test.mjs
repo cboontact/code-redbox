@@ -771,6 +771,14 @@ test("allows permission changes when an advisor record is already linked to anot
   assert.doesNotMatch(userApi, /ไม่พบข้อมูลครูที่ปรึกษาที่ใช้ Username นี้/);
 });
 
+test("quick role removal falls back to the advisor base role", async () => {
+  const usersUi = await readFile(new URL("../components/AdminUsers.tsx", import.meta.url), "utf8");
+  assert.match(usersUi, /const remainingRoles = removingRole\.user\.roles\.filter/);
+  assert.match(usersUi, /remainingRoles\.includes\("ADVISOR"\) \? remainingRoles : \[\.\.\.remainingRoles, "ADVISOR" as Role\]/);
+  assert.doesNotMatch(usersUi, /removingRole\.user\.roles\.length <= 1/);
+  assert.doesNotMatch(usersUi, /บัญชีต้องมีอย่างน้อย 1 บทบาท/);
+});
+
 test("routes students from cboonta advisory rooms into an owner-only first review", async () => {
   const [casesApi, caseDetailApi, uploadsApi, exclusiveReview, dashboard, schema, migration] = await Promise.all([
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
