@@ -7,6 +7,7 @@ import { faCircleCheck, faCircleExclamation, faEye, faEyeSlash, faFloppyDisk, fa
 type Role = "SUPER_ADMIN" | "INTAKE" | "STUDENT_AFFAIRS" | "LEVEL_HEAD" | "TEACHER" | "ADVISOR" | "DEPUTY_DIRECTOR" | "DIRECTOR";
 type StaffUser = { id: string; username: string; display_name: string; role: Role; roles: Role[]; advisor_id: string | null; advisor_name: string | null; can_view_student_identity: number; is_active: number; created_at: string };
 type Advisor = { id: string; prefix: string; first_name: string; last_name: string; source_username?: string | null; account_user_id?: string | null; account_username?: string | null };
+type AdvisorAssignment = { advisor_id: string; level: string; classroom: string };
 
 const roles: Array<{ value: Role; label: string; detail: string }> = [
   { value: "SUPER_ADMIN", label: "แอดมินระบบ", detail: "ควบคุมทุกส่วนและจัดการผู้ใช้งาน" },
@@ -25,7 +26,7 @@ function linkedAdvisorLabel(user: StaffUser) {
   if (!user.advisor_name) return null;
   const accountName = user.display_name.replace(/\s+/g, "").toLocaleLowerCase("th");
   const advisorName = user.advisor_name.replace(/\s+/g, "").toLocaleLowerCase("th");
-  return accountName === advisorName ? "เชื่อมข้อมูลครูที่ปรึกษาแล้ว" : `เชื่อมกับ ${user.advisor_name}`;
+  return accountName === advisorName ? "ใช้ข้อมูลห้องครูที่ปรึกษาแล้ว" : `ข้อมูลครูที่ปรึกษา: ${user.advisor_name}`;
 }
 
 export function AdminUsers() {
@@ -42,6 +43,7 @@ export function AdminUsers() {
   const [roleBusy, setRoleBusy] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [advisorAssignments, setAdvisorAssignments] = useState<AdvisorAssignment[]>([]);
 
   async function load() {
     const response = await fetch("/api/admin/users");
@@ -55,9 +57,10 @@ export function AdminUsers() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       load().catch(() => showToast("ไม่สามารถโหลดบัญชีผู้ใช้ได้", "error"));
-      fetch("/api/advisors").then(async (response) => await response.json() as { advisors?: Advisor[] }).then((data) => {
+      fetch("/api/advisors").then(async (response) => await response.json() as { advisors?: Advisor[]; assignments?: AdvisorAssignment[] }).then((data) => {
         const nextAdvisors = data.advisors ?? [];
         setAdvisors(nextAdvisors);
+        setAdvisorAssignments(data.assignments ?? []);
         const requestedAdvisorId = new URLSearchParams(window.location.search).get("advisorId");
         if (!requestedAdvisorId) return;
         const advisor = nextAdvisors.find((item) => item.id === requestedAdvisorId);
@@ -111,7 +114,22 @@ export function AdminUsers() {
     const selected = form.roles.includes(role);
     if (selected && form.roles.length === 1) return;
     const nextRoles = selected ? form.roles.filter((item) => item !== role) : [...form.roles, role];
-    setForm({ ...form, roles: nextRoles, advisorId: nextRoles.includes("ADVISOR") ? form.advisorId : "" });
+    let advisorId = nextRoles.includes("ADVISOR") ? form.advisorId : "";
+    if (role === "ADVISOR" && !selected && !advisorId) {
+      const normalizedUsername = form.username.trim().toLocaleLowerCase("th");
+      const normalizedName = form.displayName.replace(/\s+/g, "").toLocaleLowerCase("th");
+      const matched = advisors.find((advisor) => {
+        if (advisor.account_user_id && advisor.account_user_id !== editing?.id) return false;
+        const advisorName = `${advisor.prefix}${advisor.first_name}${advisor.last_name}`.replace(/\s+/g, "").toLocaleLowerCase("th");
+        return Boolean(normalizedUsername && advisor.source_username?.toLocaleLowerCase("th") === normalizedUsername) || Boolean(normalizedName && advisorName === normalizedName);
+      });
+      advisorId = matched?.id ?? "";
+    }
+    setForm({ ...form, roles: nextRoles, advisorId });
+  }
+  function advisorRoomLabel(advisorId: string) {
+    const rooms = advisorAssignments.filter((item) => item.advisor_id === advisorId).map((item) => `${item.level}/${item.classroom}`);
+    return rooms.length ? rooms.join(", ") : "ยังไม่ได้กำหนดห้อง";
   }
   function roleNames(values: Role[]) {
     return values.map((value) => roles.find((role) => role.value === value)?.label ?? value).join(" · ");
@@ -174,10 +192,10 @@ export function AdminUsers() {
   }
 
   return <main className="management-page"><header className="management-header"><div><span className="eyebrow"><FontAwesomeIcon icon={faShieldHalved} /> สิทธิ์และความปลอดภัย</span><h1>จัดการผู้ใช้งาน</h1><p>หนึ่งบัญชีเลือกได้หลายบทบาท ใช้ Username และรหัสผ่านชุดเดียว</p></div><button className="button primary" onClick={createUser}><FontAwesomeIcon icon={faPlus} /> เพิ่มผู้ใช้งาน</button></header>
-    <section className="management-summary user-role-summary"><article><FontAwesomeIcon icon={faUserCheck} /><div><b>{activeCount}</b><small>บัญชีที่ใช้งาน</small></div></article><article><FontAwesomeIcon icon={faUserTie} /><div><b>{advisorAccountCount}</b><small>บัญชีครูที่เชื่อมแล้ว</small></div></article><article><FontAwesomeIcon icon={faEye} /><div><b>{identityAccessCount}</b><small>ผู้มีสิทธิ์ดูตัวตน</small></div></article><article><FontAwesomeIcon icon={faUserSlash} /><div><b>{inactiveCount}</b><small>บัญชีที่ปิดใช้งาน</small></div></article></section>
+    <section className="management-summary user-role-summary"><article><FontAwesomeIcon icon={faUserCheck} /><div><b>{activeCount}</b><small>บัญชีที่ใช้งาน</small></div></article><article><FontAwesomeIcon icon={faUserTie} /><div><b>{advisorAccountCount}</b><small>บัญชีครูที่ปรึกษา</small></div></article><article><FontAwesomeIcon icon={faEye} /><div><b>{identityAccessCount}</b><small>ผู้มีสิทธิ์ดูตัวตน</small></div></article><article><FontAwesomeIcon icon={faUserSlash} /><div><b>{inactiveCount}</b><small>บัญชีที่ปิดใช้งาน</small></div></article></section>
     <section className="management-card user-management-card"><div className="user-list-heading"><div><h2>บัญชีผู้ใช้งานตามบทบาท</h2><p>เลือกแท็บเพื่อดูว่าแต่ละบทบาทมีใครบ้าง หนึ่งบัญชีจึงปรากฏได้หลายแท็บ</p></div><strong>{visible.length} จาก {users.length} บัญชี</strong></div>
       <div className="user-role-tabs" role="tablist" aria-label="กรองผู้ใช้งานตามบทบาท"><button type="button" role="tab" aria-selected={!roleFilter} className={!roleFilter ? "active" : ""} onClick={() => setRoleFilter("")}>ทั้งหมด <span>{users.length}</span></button>{roles.map((role) => { const count = users.filter((user) => user.roles.includes(role.value)).length; return <button type="button" role="tab" aria-selected={roleFilter === role.value} className={roleFilter === role.value ? "active" : ""} key={role.value} onClick={() => setRoleFilter(role.value)}>{role.label} <span>{count}</span></button>; })}<button type="button" role="tab" aria-selected={roleFilter === "IDENTITY_ACCESS"} className={`identity-tab ${roleFilter === "IDENTITY_ACCESS" ? "active" : ""}`} onClick={() => setRoleFilter("IDENTITY_ACCESS")}><FontAwesomeIcon icon={faEye} /> ดูตัวตนนักเรียน <span>{identityAccessCount}</span></button></div>
-      <div className="advisor-filter-bar user-search-only"><label className="advisor-search"><FontAwesomeIcon icon={faMagnifyingGlass} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหาชื่อ Username หรือครูที่เชื่อม" /></label></div>
+      <div className="advisor-filter-bar user-search-only"><label className="advisor-search"><FontAwesomeIcon icon={faMagnifyingGlass} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหาชื่อ Username หรือครูที่ปรึกษา" /></label></div>
       <div className="user-list">{visible.length === 0 ? <div className="empty-state"><FontAwesomeIcon icon={faUsersGear} /><h3>ยังไม่มีผู้ใช้งานในแท็บนี้</h3><p>เพิ่มบทบาทหรือสิทธิ์จากปุ่มเพิ่มผู้ใช้งาน</p></div> : visible.map((user) => { const protectedAccount = user.username === "cboonta"; const canViewIdentity = protectedAccount || Boolean(user.can_view_student_identity); const advisorLabel = linkedAdvisorLabel(user); const tabRole = roles.find((role) => role.value === roleFilter); return <article key={user.id} className={!user.is_active ? "inactive" : ""}><span className="user-avatar">{user.display_name.slice(0, 1)}</span><div className="user-identity"><b>{user.display_name}</b><small>@{user.username}</small>{protectedAccount && <span className="protected-account"><FontAwesomeIcon icon={faLock} /> ผู้ดูแลสูงสุด</span>}{advisorLabel && <span className="linked-person"><FontAwesomeIcon icon={faLink} /> {advisorLabel}</span>}</div><div className="user-role"><div className="user-role-tags">{user.roles.map((value) => <span key={value}>{roles.find((role) => role.value === value)?.label ?? value}</span>)}{canViewIdentity && <span className="identity-access-tag"><FontAwesomeIcon icon={faEye} /> ดูตัวตนผู้แจ้งได้</span>}</div><small>{protectedAccount ? "เข้าถึงทุกส่วนและไม่สามารถลดสิทธิ์ได้" : `${user.roles.length} บทบาทในบัญชีเดียว`}</small></div><div className="user-actions"><button className="edit-user" onClick={() => editUser(user)} disabled={protectedAccount} title={protectedAccount ? "บัญชีผู้ดูแลสูงสุดถูกป้องกัน" : "แก้ไขข้อมูลและสิทธิ์"} aria-label={`แก้ไข ${user.display_name}`}><FontAwesomeIcon icon={protectedAccount ? faLock : faPen} /><span>{protectedAccount ? "บัญชีหลัก" : "แก้ไข"}</span></button>{!protectedAccount && tabRole && <button type="button" className="remove-role" onClick={() => setRemovingRole({ user, role: tabRole.value })} title={`นำบทบาท ${tabRole.label} ออก`} aria-label={`นำบทบาท ${tabRole.label} ออกจาก ${user.display_name}`}><FontAwesomeIcon icon={faUserMinus} /></button>}<button type="button" role="switch" aria-checked={Boolean(user.is_active)} aria-label={`${user.is_active ? "ปิด" : "เปิด"}ใช้งานบัญชี ${user.display_name}`} className={`account-toggle ${user.is_active ? "on" : "off"}`} onClick={() => toggle(user)} disabled={protectedAccount} title={protectedAccount ? "บัญชีผู้ดูแลสูงสุดเปิดใช้งานถาวร" : user.is_active ? "กดเพื่อปิดใช้งาน" : "กดเพื่อเปิดใช้งาน"}><span className="toggle-track"><span /></span></button></div></article>; })}</div>
     </section>
     {open && <div className="student-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setOpen(false); }}><section className="student-modal user-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title"><form onSubmit={save}>
@@ -188,7 +206,7 @@ export function AdminUsers() {
         <label><span>{editing ? "ตั้งรหัสผ่านใหม่" : "รหัสผ่าน"}</span><input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={editing ? "เว้นว่างหากไม่เปลี่ยน" : "อย่างน้อย 8 ตัวอักษร"} minLength={8} required={!editing} /></label>
         <fieldset className="role-picker"><legend>กำหนดบทบาท <small>เลือกได้หลายรายการ</small></legend><div>{roles.map((role) => { const selected = form.roles.includes(role.value); return <button type="button" key={role.value} className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => toggleRole(role.value)}><span><FontAwesomeIcon icon={role.value === "SUPER_ADMIN" ? faShieldHalved : ["DIRECTOR", "DEPUTY_DIRECTOR"].includes(role.value) ? faUserTie : role.value === "ADVISOR" ? faLink : ["LEVEL_HEAD", "TEACHER", "STUDENT_AFFAIRS"].includes(role.value) ? faUserCheck : faKey} /></span><div><b>{role.label}</b><small>{role.detail}</small></div>{selected && <FontAwesomeIcon className="role-selected-check" icon={faCircleCheck} />}</button>; })}</div></fieldset>
         <div className={`identity-permission-card ${form.canViewStudentIdentity ? "enabled" : ""}`}><span className="identity-permission-icon"><FontAwesomeIcon icon={form.canViewStudentIdentity ? faEye : faEyeSlash} /></span><div><b>อนุญาตให้ดูตัวตนนักเรียน</b><small>เห็นชื่อและเลขประจำตัวในเคสที่นักเรียนเลือกปกปิดตัวตน ควรให้เฉพาะผู้ที่จำเป็น</small></div><button type="button" role="switch" aria-checked={form.canViewStudentIdentity} className={`account-toggle ${form.canViewStudentIdentity ? "on" : "off"}`} onClick={() => setForm({ ...form, canViewStudentIdentity: !form.canViewStudentIdentity })} title={form.canViewStudentIdentity ? "กดเพื่อยกเลิกสิทธิ์ดูตัวตน" : "กดเพื่ออนุญาตให้ดูตัวตน"}><span className="toggle-track"><span /></span></button></div>
-        {form.roles.includes("ADVISOR") && <label className="advisor-account-link"><span>เชื่อมกับข้อมูลครูที่ปรึกษา</span><select value={form.advisorId} onChange={(event) => { const advisor = advisors.find((item) => item.id === event.target.value); setForm({ ...form, advisorId: event.target.value, ...(!editing && advisor ? { displayName: `${advisor.prefix}${advisor.first_name} ${advisor.last_name}`, username: form.username || advisor.source_username || "" } : {}) }); }} required><option value="">เลือกครูที่ยังไม่มีบัญชี</option>{selectableAdvisors.map((advisor) => <option key={advisor.id} value={advisor.id}>{advisor.prefix}{advisor.first_name} {advisor.last_name}{advisor.account_username ? ` · @${advisor.account_username}` : ""}</option>)}</select><small className="field-help">เชื่อมครูหนึ่งครั้ง แล้วเพิ่มบทบาทอื่นในบัญชีเดียวกันได้</small></label>}
+        {form.roles.includes("ADVISOR") && <label className="advisor-account-link"><span>ครูคนนี้ดูแลห้องใด</span><div className="advisor-data-explanation"><FontAwesomeIcon icon={faCircleExclamation} /><small>ระบบใช้ข้อมูลนี้เพื่อแสดงเคสของนักเรียนในห้องที่ครูรับผิดชอบ ไม่ได้สร้างบัญชีซ้ำหรือเชื่อมระบบภายนอก</small></div><select value={form.advisorId} onChange={(event) => { const advisor = advisors.find((item) => item.id === event.target.value); setForm({ ...form, advisorId: event.target.value, ...(!editing && advisor ? { displayName: `${advisor.prefix}${advisor.first_name} ${advisor.last_name}`, username: form.username || advisor.source_username || "" } : {}) }); }} required><option value="">เลือกชื่อครูเพื่อใช้ข้อมูลห้องที่ดูแล</option>{selectableAdvisors.map((advisor) => <option key={advisor.id} value={advisor.id}>{advisor.prefix}{advisor.first_name} {advisor.last_name} · {advisorRoomLabel(advisor.id)}{advisor.account_username ? ` · @${advisor.account_username}` : ""}</option>)}</select><small className="field-help">หาก Username หรือชื่อตรงกับข้อมูลครู ระบบจะเลือกให้โดยอัตโนมัติ</small></label>}
         {editing && roleNames(editing.roles) !== roleNames(form.roles) && <div className="role-change-notice"><FontAwesomeIcon icon={faCircleExclamation} /><span><b>กำลังปรับบทบาทของบัญชี</b><small>{roleNames(editing.roles)} → {roleNames(form.roles)}</small></span></div>}
         {form.roles.includes("SUPER_ADMIN") && <div className="role-warning"><FontAwesomeIcon icon={faShieldHalved} /><span><b>สิทธิ์ระดับสูงสุด</b><small>บทบาทนี้ครอบคลุมทุกส่วน รวมถึงจัดการผู้ใช้ ลบเคส และเปลี่ยนสิทธิ์</small></span></div>}
       </div></div>

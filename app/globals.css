@@ -568,6 +568,7 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
 .identity-permission-card b { color:#354155; font-size:12px; }
 .identity-permission-card small { color:#748092; font-size:10px; line-height:1.5; }
 .advisor-account-link { grid-column:1/-1; }
+.advisor-data-explanation { display:flex; align-items:flex-start; gap:8px; margin:0 0 9px; padding:10px 11px; border:1px solid #cfe7ea; border-radius:11px; color:#24717a; background:#f2fafb; }.advisor-data-explanation>svg { margin-top:2px; flex:none; }.advisor-data-explanation small { color:#58767b; line-height:1.5; }
 .field-help { display:block; margin-top:6px; color:#758092; font-size:10px; line-height:1.45; }
 .status-ASSIGNED { color:#5f50a4; background:#f0edff; }
 .status-ADMIN_REVIEW,.status-PENDING_CLOSE { color:#8b670b; background:#fff5d8; }
