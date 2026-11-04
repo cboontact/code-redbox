@@ -671,4 +671,8 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
 .password-form-grid input { width:100%; min-height:48px; padding:11px 13px; border:1px solid #dce2ea; border-radius:12px; background:#fbfcfd; font:inherit; }
 .password-form-grid input:focus { border-color:#57b8c2; background:white; box-shadow:0 0 0 4px rgba(14,165,183,.1); outline:0; }
 
+.stat-card.tone-purple>span { color:#7353b7; background:#f1edff; }
+.stat-card.active { border-color:#b9c7db; box-shadow:0 0 0 3px rgba(69,91,126,.08),0 8px 20px rgba(15,23,42,.05); }
+.stat-card.active .stat-arrow { color:#52647d; }
+
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }

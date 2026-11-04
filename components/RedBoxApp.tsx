@@ -134,6 +134,13 @@ const statusGroups: Array<{ key: string; label: string; statuses: readonly CaseS
   { key: "active", label: "กำลังดำเนินการและตรวจผล", statuses: ["IN_PROGRESS", "INTAKE_REVIEW", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "DIRECTOR_ORDERED", "PENDING_CLOSE"] },
   { key: "completed", label: "เสร็จสิ้น", statuses: ["RESOLVED", "CLOSED"] },
 ];
+const dashboardStatusFilters = {
+  new: ["NEW", "REOPENED"],
+  pending: ["AFFAIRS_REVIEW", "DEPUTY_REVIEW", "SCREENING", "ASSIGNED"],
+  active: ["IN_PROGRESS", "DIRECTOR_ORDERED"],
+  review: ["INTAKE_REVIEW", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "PENDING_CLOSE"],
+  closed: ["RESOLVED", "CLOSED"],
+} as const satisfies Record<string, readonly CaseStatus[]>;
 const severityLabels: Record<string, string> = {
   WATCH: "เฝ้าระวัง",
   MODERATE: "เสี่ยงปานกลาง",
@@ -1505,7 +1512,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [status, setStatus] = useState("");
   const [severity, setSeverity] = useState("");
   const [quickFilter, setQuickFilter] = useState<
-    "all" | "new" | "immediate" | "closed"
+    "all" | "new" | "pending" | "active" | "review" | "immediate" | "closed"
   >("all");
   const [selected, setSelected] = useState<Detail | null>(null);
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null);
@@ -1562,16 +1569,20 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
     function applyDashboardFilter(event: Event) {
       const label = (event as CustomEvent<string>).detail;
       setQuickFilter(
-        label === "เคสใหม่"
+        label === "รับเรื่องแล้ว"
           ? "new"
-          : label === "ตรวจสอบทันที"
-            ? "immediate"
-            : label === "สำเร็จ / ปิดแล้ว"
-              ? "closed"
-              : "all",
+          : label === "รอพิจารณา / มอบหมาย"
+            ? "pending"
+            : label === "กำลังดำเนินการ"
+              ? "active"
+              : label === "รอตรวจผล / ปิด"
+                ? "review"
+                : label === "เสร็จสิ้น"
+                  ? "closed"
+                  : "all",
       );
-      setStatus(label === "กำลังดำเนินการ" ? "IN_PROGRESS" : "");
-      setSeverity(label === "Critical" ? "CRITICAL" : "");
+      setStatus("");
+      setSeverity("");
     }
     window.addEventListener("redbox-filter", applyDashboardFilter);
     return () =>
@@ -1674,23 +1685,21 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const counts = useMemo(
     () => ({
       all: cases.length,
-      new: cases.filter((c) => c.status === "NEW").length,
+      new: cases.filter((c) => dashboardStatusFilters.new.includes(c.status)).length,
+      pending: cases.filter((c) => dashboardStatusFilters.pending.includes(c.status)).length,
+      active: cases.filter((c) => dashboardStatusFilters.active.includes(c.status)).length,
+      review: cases.filter((c) => dashboardStatusFilters.review.includes(c.status)).length,
       immediate: cases.filter((c) => c.requires_immediate_review).length,
-      critical: cases.filter((c) => c.severity === "CRITICAL").length,
-      progress: cases.filter((c) => c.status === "IN_PROGRESS").length,
-      closed: cases.filter((c) => ["RESOLVED", "CLOSED"].includes(c.status))
-        .length,
+      closed: cases.filter((c) => dashboardStatusFilters.closed.includes(c.status)).length,
     }),
     [cases],
   );
   const visibleCases =
-    quickFilter === "new"
-      ? cases.filter((item) => item.status === "NEW")
+    quickFilter === "all"
+      ? cases
       : quickFilter === "immediate"
         ? cases.filter((item) => item.requires_immediate_review)
-        : quickFilter === "closed"
-          ? cases.filter((item) => ["RESOLVED", "CLOSED"].includes(item.status))
-          : cases;
+        : cases.filter((item) => dashboardStatusFilters[quickFilter].includes(item.status));
   const selectedStatus = String(selected?.case.status ?? "");
   const hasRole = (role: string) => currentRole === "SUPER_ADMIN" || currentRoles.includes("SUPER_ADMIN") || currentRole === role || currentRoles.includes(role);
   const isCurrentAssignee = Boolean(
@@ -1754,7 +1763,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               setStatus("");
             }}
           >
-            <FontAwesomeIcon icon={faMessage} /> เคสใหม่ <b>{counts.new}</b>
+            <FontAwesomeIcon icon={faMessage} /> รับเรื่องแล้ว <b>{counts.new}</b>
           </button>
           <button
             type="button"
@@ -1819,36 +1828,42 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               label="เรื่องทั้งหมด"
               value={counts.all}
               tone="blue"
+              active={quickFilter === "all"}
             />
             <Stat
               icon={faMessage}
-              label="เคสใหม่"
+              label="รับเรื่องแล้ว"
               value={counts.new}
               tone="cyan"
-            />
-            <Stat
-              icon={faTriangleExclamation}
-              label="ตรวจสอบทันที"
-              value={counts.immediate}
-              tone="red"
+              active={quickFilter === "new"}
             />
             <Stat
               icon={faClock}
-              label="กำลังดำเนินการ"
-              value={counts.progress}
+              label="รอพิจารณา / มอบหมาย"
+              value={counts.pending}
               tone="amber"
+              active={quickFilter === "pending"}
             />
             <Stat
               icon={faShieldHalved}
-              label="Critical"
-              value={counts.critical}
+              label="กำลังดำเนินการ"
+              value={counts.active}
               tone="orange"
+              active={quickFilter === "active"}
+            />
+            <Stat
+              icon={faMagnifyingGlass}
+              label="รอตรวจผล / ปิด"
+              value={counts.review}
+              tone="purple"
+              active={quickFilter === "review"}
             />
             <Stat
               icon={faCheckCircle}
-              label="สำเร็จ / ปิดแล้ว"
+              label="เสร็จสิ้น"
               value={counts.closed}
               tone="green"
+              active={quickFilter === "closed"}
             />
           </div>
           <section className="case-panel">
@@ -2753,16 +2768,19 @@ function Stat({
   label,
   value,
   tone,
+  active,
 }: {
   icon: typeof faFolderOpen;
   label: string;
   value: number;
   tone: string;
+  active: boolean;
 }) {
   return (
     <button
       type="button"
-      className={`stat-card tone-${tone}`}
+      className={`stat-card tone-${tone}${active ? " active" : ""}`}
+      aria-pressed={active}
       onClick={() =>
         window.dispatchEvent(
           new CustomEvent("redbox-filter", { detail: label }),

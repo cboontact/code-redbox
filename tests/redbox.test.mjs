@@ -189,6 +189,20 @@ test("orders the staff case queue by pending, active, then completed work", asyn
   assert.match(dashboard, /ยังไม่ได้ดำเนินการ → กำลังดำเนินการ → เสร็จสิ้น/);
 });
 
+test("dashboard stat cards follow non-overlapping workflow statuses", async () => {
+  const dashboard = await readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8");
+  for (const label of ["เรื่องทั้งหมด", "รับเรื่องแล้ว", "รอพิจารณา / มอบหมาย", "กำลังดำเนินการ", "รอตรวจผล / ปิด", "เสร็จสิ้น"]) {
+    assert.match(dashboard, new RegExp(`label="${label.replace("/", "\\/")}"`));
+  }
+  assert.match(dashboard, /new: \["NEW", "REOPENED"\]/);
+  assert.match(dashboard, /pending: \["AFFAIRS_REVIEW", "DEPUTY_REVIEW", "SCREENING", "ASSIGNED"\]/);
+  assert.match(dashboard, /active: \["IN_PROGRESS", "DIRECTOR_ORDERED"\]/);
+  assert.match(dashboard, /review: \["INTAKE_REVIEW", "ADMIN_REVIEW", "DIRECTOR_REVIEW", "PENDING_CLOSE"\]/);
+  assert.match(dashboard, /closed: \["RESOLVED", "CLOSED"\]/);
+  assert.doesNotMatch(dashboard, /label="Critical"|label="ตรวจสอบทันที"/);
+  assert.match(dashboard, /aria-pressed=\{active\}/);
+});
+
 test("shows each case title beneath its case number without adding a crowded column", async () => {
   const [dashboard, styles] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
