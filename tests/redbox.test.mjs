@@ -117,6 +117,13 @@ test("renders workflow transitions above the responsive case modal", async () =>
   assert.match(styles, /\.case-modal-backdrop\s*\{[^}]*place-items:center/);
   assert.match(styles, /\.case-detail-modal\s*\{[^}]*max-height:calc\(100dvh - 48px\)/);
   assert.match(styles, /\.case-detail-modal\s*\{[^}]*border-radius:22px/);
+  assert.match(dashboard, /case-summary-block/);
+  assert.match(dashboard, /case-support-grid/);
+  assert.match(dashboard, /case-history-grid/);
+  assert.match(dashboard, /ลำดับการดำเนินงาน/);
+  assert.match(styles, /\.case-detail-modal \.detail-grid\s*\{[^}]*repeat\(3/);
+  assert.match(styles, /\.case-support-grid\s*\{[^}]*repeat\(2/);
+  assert.match(styles, /\.case-history-grid\s*\{[^}]*grid-template-columns/);
 });
 
 test("routes intake screening to student affairs before team assignment", async () => {

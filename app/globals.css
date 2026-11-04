@@ -450,10 +450,39 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
   .case-modal-body { padding:19px 16px 28px; }
 }
 
+.case-detail-modal { width:min(1040px,calc(100vw - 48px)); }
+.case-modal-body { padding:20px; }
+.case-summary-block { padding:18px; border:1px solid #e7ebf0; border-radius:18px; background:linear-gradient(145deg,#fff 0%,#fbfcfe 100%); }
+.case-summary-block .case-badges { margin-bottom:12px; }
+.case-summary-block .exclusive-review-notice { margin:0 0 14px; }
+.case-summary-block .case-title { margin:0 0 7px; }
+.case-summary-block .case-description { margin:0; }
+.case-detail-modal .detail-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; margin:12px 0 0; }
+.case-detail-modal .detail-grid>div { min-height:64px; padding:11px 12px; }
+.case-support-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
+.case-support-grid>.note-card { min-width:0; margin:0; padding:15px; }
+.case-support-grid>.evidence-card:only-child { grid-column:1/-1; }
+.case-detail-modal .action-card { margin-top:12px; padding:16px; }
+.case-detail-modal .workflow-guidance { grid-column:auto; min-height:66px; }
+.case-history-grid { display:grid; grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr); gap:12px; align-items:start; margin-top:12px; }
+.case-history-grid>.note-card,.case-history-grid>.timeline-card { min-width:0; margin:0; padding:15px; }
+.case-history-grid>.timeline-card { max-height:460px; overflow:auto; overscroll-behavior:contain; }
 .case-id-cell { min-width:230px; max-width:290px; }
 .case-list-title { display:block; max-width:270px; margin-top:4px; overflow:hidden; color:#687588; font-size:11px; font-weight:500; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
 .case-table tbody tr:hover .case-list-title { color:#3f4d61; }
+@media (max-width:820px) {
+  .case-detail-modal .detail-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .case-history-grid { grid-template-columns:1fr; }
+  .case-history-grid>.timeline-card { max-height:none; overflow:visible; }
+}
 @media (max-width:600px) {
+  .case-detail-modal { width:100%; }
+  .case-modal-body { padding:14px; }
+  .case-summary-block { padding:15px; border-radius:15px; }
+  .case-detail-modal .detail-grid { grid-template-columns:1fr; }
+  .case-support-grid,.case-history-grid { grid-template-columns:1fr; }
+  .case-detail-modal .workflow-guidance { grid-column:1/-1; }
+  .case-history-grid>.timeline-card { max-height:none; overflow:visible; }
   .case-id-cell { min-width:210px; max-width:240px; }
   .case-list-title { max-width:220px; font-size:10px; }
 }

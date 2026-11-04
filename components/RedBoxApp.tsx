@@ -2016,6 +2016,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               </button>
             </header>
             <div className="case-modal-body">
+              <section className="case-summary-block">
               <div className="case-badges">
                 <SeverityBadge value={String(selected.case.severity)} />
                 <button
@@ -2040,6 +2041,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 {selected.case.title}
               </h3>
               <p className="case-description">{selected.case.description}</p>
+              </section>
               <div className="detail-grid">
                 <Review
                   label="ประเภท"
@@ -2080,6 +2082,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   }
                 />
               </div>
+              <div className="case-support-grid">
               {selected.assignments?.length > 0 && (
                 <div className="note-card case-team-card">
                   <h4 className="section-title"><FontAwesomeIcon icon={faPeopleGroup} /> ทีมผู้ดำเนินการ</h4>
@@ -2088,7 +2091,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   ))}</div>
                 </div>
               )}
-              <div className="note-card">
+              <div className="note-card evidence-card">
                 <h4 className="section-title">
                   <FontAwesomeIcon icon={faFileArrowUp} />
                   ไฟล์หลักฐาน
@@ -2112,6 +2115,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     ))}
                   </div>
                 )}
+              </div>
               </div>
               <div className="action-card" id="case-workflow-actions">
                 <h4 className="section-title">
@@ -2374,6 +2378,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </button>
                   )}
               </div>
+              <div className="case-history-grid">
               <div className="note-card internal-note-card">
                 <div className="note-card-heading">
                   <h4 className="section-title">
@@ -2478,7 +2483,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               <div className="timeline-card">
                 <h4 className="section-title">
                   <FontAwesomeIcon icon={faClock} />
-                  Timeline
+                  ลำดับการดำเนินงาน
                 </h4>
                 {selected.timeline.map((item) => (
                   <div className="timeline-item" key={item.id}>
@@ -2492,6 +2497,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </div>
                   </div>
                 ))}
+              </div>
               </div>
               {currentRole === "SUPER_ADMIN" && (
                 <section className="admin-tools-card">
