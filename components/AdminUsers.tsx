@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCircleCheck, faCircleExclamation, faEye, faEyeSlash, faFloppyDisk, faKey, faLink, faLock, faMagnifyingGlass, faPen, faPlus, faSchool, faShieldHalved, faTrashCan, faTriangleExclamation, faUserCheck, faUserMinus, faUserSlash, faUserTie, faUsersGear, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faCircleCheck, faCircleExclamation, faEye, faEyeSlash, faFloppyDisk, faKey, faLink, faLock, faMagnifyingGlass, faPen, faPlus, faSchool, faShieldHalved, faTrashCan, faTriangleExclamation, faUserCheck, faUserMinus, faUserPlus, faUserSlash, faUserTie, faUsersGear, faXmark } from "@fortawesome/free-solid-svg-icons";
 
 type Role = "SUPER_ADMIN" | "INTAKE" | "STUDENT_AFFAIRS" | "LEVEL_HEAD" | "TEACHER" | "ADVISOR" | "DEPUTY_DIRECTOR" | "DIRECTOR";
 type StaffUser = { id: string; username: string; display_name: string; role: Role; roles: Role[]; advisor_id: string | null; advisor_name: string | null; can_view_student_identity: number; is_active: number; created_at: string };
@@ -34,6 +34,10 @@ export function AdminUsers() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [removingRole, setRemovingRole] = useState<{ user: StaffUser; role: Role } | null>(null);
   const [roleBusy, setRoleBusy] = useState(false);
+  const [addingRole, setAddingRole] = useState<Role | null>(null);
+  const [roleCandidateSearch, setRoleCandidateSearch] = useState("");
+  const [selectedRoleUsers, setSelectedRoleUsers] = useState<string[]>([]);
+  const [addingRoleBusy, setAddingRoleBusy] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [advisorAssignments, setAdvisorAssignments] = useState<AdvisorAssignment[]>([]);
 
@@ -87,6 +91,13 @@ export function AdminUsers() {
     };
   }, [open, saving]);
 
+  useEffect(() => {
+    if (!addingRole) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [addingRole]);
+
   const visible = useMemo(() => users.filter((user) => {
     const matchesSearch = `${user.display_name} ${user.username} ${user.advisor_name ?? ""}`.toLowerCase().includes(search.toLowerCase());
     const matchesTab = !roleFilter
@@ -97,6 +108,11 @@ export function AdminUsers() {
   const advisorAccountCount = users.filter((user) => user.roles.includes("ADVISOR") && user.advisor_id && user.is_active).length;
   const inactiveCount = users.filter((user) => !user.is_active).length;
   const identityAccessCount = users.filter((user) => user.is_active && (user.can_view_student_identity || user.roles.includes("SUPER_ADMIN"))).length;
+  const activeTabRole = roles.find((role) => role.value === roleFilter);
+  const roleCandidates = addingRole
+    ? users.filter((user) => user.is_active && user.username !== "cboonta" && !user.roles.includes(addingRole)
+      && `${user.display_name} ${user.username}`.toLocaleLowerCase("th").includes(roleCandidateSearch.toLocaleLowerCase("th")))
+    : [];
   function createUser() { setEditing(null); setForm(emptyForm); setOpen(true); }
   function editUser(user: StaffUser) { setEditing(user); setForm({ username: user.username, password: "", displayName: user.display_name, roles: user.roles.includes("ADVISOR") ? user.roles : [...user.roles, "ADVISOR"], advisorId: user.advisor_id ?? "", canViewStudentIdentity: Boolean(user.can_view_student_identity) }); setOpen(true); }
   function toggleRole(role: Role) {
@@ -179,12 +195,49 @@ export function AdminUsers() {
     finally { setRoleBusy(false); }
   }
 
+  function openAddRole(role: Role) {
+    setAddingRole(role);
+    setRoleCandidateSearch("");
+    setSelectedRoleUsers([]);
+  }
+
+  async function addSelectedUsersToRole() {
+    if (!addingRole || selectedRoleUsers.length === 0) return;
+    setAddingRoleBusy(true);
+    let completed = 0;
+    try {
+      for (const userId of selectedRoleUsers) {
+        const user = users.find((item) => item.id === userId);
+        if (!user) continue;
+        const response = await fetch(`/api/admin/users/${user.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ roles: [...user.roles, addingRole] }),
+        });
+        const data = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(data.error ?? `เพิ่มบทบาทให้ ${user.display_name} ไม่สำเร็จ`);
+        completed += 1;
+      }
+      const roleLabel = roles.find((role) => role.value === addingRole)?.label ?? addingRole;
+      setAddingRole(null);
+      setSelectedRoleUsers([]);
+      await load();
+      showToast(`เพิ่ม ${roleLabel} ให้ ${completed} บัญชีแล้ว`);
+    } catch (error) {
+      await load();
+      const prefix = completed ? `เพิ่มสำเร็จแล้ว ${completed} บัญชี แต่` : "";
+      showToast(`${prefix}${error instanceof Error ? error.message : "เพิ่มบทบาทไม่สำเร็จ"}`, "error");
+    } finally {
+      setAddingRoleBusy(false);
+    }
+  }
+
   return <main className="management-page"><header className="management-header"><div><span className="eyebrow"><FontAwesomeIcon icon={faShieldHalved} /> สิทธิ์และความปลอดภัย</span><h1>จัดการผู้ใช้งาน</h1><p>หนึ่งบัญชีเลือกได้หลายบทบาท ใช้ Username และรหัสผ่านชุดเดียว</p></div><button className="button primary" onClick={createUser}><FontAwesomeIcon icon={faPlus} /> เพิ่มผู้ใช้งาน</button></header>
     <section className="management-summary user-role-summary"><article><FontAwesomeIcon icon={faUserCheck} /><div><b>{activeCount}</b><small>บัญชีที่ใช้งาน</small></div></article><article><FontAwesomeIcon icon={faUserTie} /><div><b>{advisorAccountCount}</b><small>บัญชีครูที่ปรึกษา</small></div></article><article><FontAwesomeIcon icon={faEye} /><div><b>{identityAccessCount}</b><small>ผู้มีสิทธิ์ดูตัวตน</small></div></article><article><FontAwesomeIcon icon={faUserSlash} /><div><b>{inactiveCount}</b><small>บัญชีที่ปิดใช้งาน</small></div></article></section>
-    <section className="management-card user-management-card"><div className="user-list-heading"><div><h2>บัญชีผู้ใช้งานตามบทบาท</h2><p>เลือกแท็บเพื่อดูว่าแต่ละบทบาทมีใครบ้าง หนึ่งบัญชีจึงปรากฏได้หลายแท็บ</p></div><strong>{visible.length} จาก {users.length} บัญชี</strong></div>
+    <section className="management-card user-management-card"><div className="user-list-heading"><div><h2>{activeTabRole ? `ผู้ใช้งานบทบาท ${activeTabRole.label}` : "บัญชีผู้ใช้งานตามบทบาท"}</h2><p>{activeTabRole ? `เพิ่มหรือถอนบทบาท ${activeTabRole.label} ได้จากหน้านี้` : "เลือกแท็บเพื่อดูว่าแต่ละบทบาทมีใครบ้าง หนึ่งบัญชีจึงปรากฏได้หลายแท็บ"}</p></div><div className="user-list-heading-actions">{activeTabRole && <button type="button" className="button secondary compact add-role-member" onClick={() => openAddRole(activeTabRole.value)}><FontAwesomeIcon icon={faUserPlus} /> เพิ่มสมาชิกในบทบาทนี้</button>}<strong>{visible.length} จาก {users.length} บัญชี</strong></div></div>
       <div className="user-role-tabs" role="tablist" aria-label="กรองผู้ใช้งานตามบทบาท"><button type="button" role="tab" aria-selected={!roleFilter} className={!roleFilter ? "active" : ""} onClick={() => setRoleFilter("")}>ทั้งหมด <span>{users.length}</span></button>{roles.map((role) => { const count = users.filter((user) => user.roles.includes(role.value)).length; return <button type="button" role="tab" aria-selected={roleFilter === role.value} className={roleFilter === role.value ? "active" : ""} key={role.value} onClick={() => setRoleFilter(role.value)}>{role.label} <span>{count}</span></button>; })}<button type="button" role="tab" aria-selected={roleFilter === "IDENTITY_ACCESS"} className={`identity-tab ${roleFilter === "IDENTITY_ACCESS" ? "active" : ""}`} onClick={() => setRoleFilter("IDENTITY_ACCESS")}><FontAwesomeIcon icon={faEye} /> ดูตัวตนนักเรียน <span>{identityAccessCount}</span></button></div>
       <div className="advisor-filter-bar user-search-only"><label className="advisor-search"><FontAwesomeIcon icon={faMagnifyingGlass} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหาชื่อ Username หรือครูที่ปรึกษา" /></label></div>
-      <div className="user-list">{visible.length === 0 ? <div className="empty-state"><FontAwesomeIcon icon={faUsersGear} /><h3>ยังไม่มีผู้ใช้งานในแท็บนี้</h3><p>เพิ่มบทบาทหรือสิทธิ์จากปุ่มเพิ่มผู้ใช้งาน</p></div> : visible.map((user) => {
+      <div className="user-list">{visible.length === 0 ? <div className="empty-state"><FontAwesomeIcon icon={faUsersGear} /><h3>ยังไม่มีผู้ใช้งานในแท็บนี้</h3><p>{activeTabRole ? "กดปุ่มเพิ่มสมาชิกในบทบาทนี้เพื่อเลือกผู้ใช้งาน" : "เลือกแท็บบทบาทที่ต้องการก่อน"}</p></div> : visible.map((user) => {
         const protectedAccount = user.username === "cboonta";
         const canViewIdentity = protectedAccount || Boolean(user.can_view_student_identity);
         const advisorScope = advisorScopeLabel(user);
@@ -202,6 +255,7 @@ export function AdminUsers() {
         </article>;
       })}</div>
     </section>
+    {addingRole && <div className="student-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !addingRoleBusy) setAddingRole(null); }}><section className="student-modal role-member-modal" role="dialog" aria-modal="true" aria-labelledby="add-role-member-title"><header className="student-modal-header"><div><span className="student-modal-icon"><FontAwesomeIcon icon={faUserPlus} /></span><div><small>จัดการบทบาท</small><h2 id="add-role-member-title">เพิ่ม{roles.find((role) => role.value === addingRole)?.label}</h2></div></div><button type="button" onClick={() => setAddingRole(null)} disabled={addingRoleBusy} aria-label="ปิด Modal"><FontAwesomeIcon icon={faXmark} /></button></header><div className="role-member-body"><label className="role-member-search"><FontAwesomeIcon icon={faMagnifyingGlass} /><input autoFocus value={roleCandidateSearch} onChange={(event) => setRoleCandidateSearch(event.target.value)} placeholder="ค้นหาชื่อหรือ Username" /></label><div className="role-member-summary"><span>เลือกแล้ว <b>{selectedRoleUsers.length}</b> คน</span><small>เลือกได้หลายคนและบันทึกพร้อมกัน</small></div><div className="role-member-candidates">{roleCandidates.length === 0 ? <div className="empty-state compact"><FontAwesomeIcon icon={faUserCheck} /><h3>ไม่มีบัญชีที่เพิ่มได้</h3><p>{roleCandidateSearch ? "ไม่พบชื่อที่ค้นหา" : "ทุกบัญชีมีบทบาทนี้แล้ว"}</p></div> : roleCandidates.map((user) => { const selected = selectedRoleUsers.includes(user.id); return <button type="button" key={user.id} className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => setSelectedRoleUsers(selected ? selectedRoleUsers.filter((id) => id !== user.id) : [...selectedRoleUsers, user.id])}><span className="user-avatar">{user.display_name.slice(0, 1)}</span><span><b>{user.display_name}</b><small>@{user.username}</small></span><FontAwesomeIcon icon={selected ? faCircleCheck : faPlus} /></button>; })}</div></div><footer className="student-modal-actions"><button type="button" className="button secondary" onClick={() => setAddingRole(null)} disabled={addingRoleBusy}>ยกเลิก</button><button type="button" className="button primary" onClick={addSelectedUsersToRole} disabled={addingRoleBusy || selectedRoleUsers.length === 0}><FontAwesomeIcon icon={faUserPlus} /> {addingRoleBusy ? "กำลังเพิ่ม..." : `เพิ่ม ${selectedRoleUsers.length} คน`}</button></footer></section></div>}
     {open && <div className="student-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setOpen(false); }}><section className="student-modal user-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title"><form onSubmit={save}>
       <header className="student-modal-header"><div><span className="student-modal-icon"><FontAwesomeIcon icon={editing ? faPen : faPlus} /></span><div><small><FontAwesomeIcon icon={faKey} /> บัญชีและสิทธิ์</small><h2 id="user-modal-title">{editing ? "แก้ไขผู้ใช้งาน" : "เพิ่มผู้ใช้งาน"}</h2></div></div><button type="button" onClick={() => setOpen(false)} disabled={saving} aria-label="ปิด Modal"><FontAwesomeIcon icon={faXmark} /></button></header>
       <div className="student-modal-body user-modal-body"><p className="student-modal-help">เลือกได้มากกว่า 1 บทบาท โดยผู้ใช้เข้าสู่ระบบด้วยบัญชีเดียว</p><div className="user-form-grid">

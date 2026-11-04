@@ -747,6 +747,22 @@ test("treats advisor access as the automatic base role for every staff account",
   assert.match(bootstrap, /INSERT OR IGNORE INTO staff_user_roles \(user_id,role\)[\s\S]*?'ADVISOR'/);
 });
 
+test("adds users directly from each role tab with a searchable multi-select modal", async () => {
+  const [usersUi, styles] = await Promise.all([
+    readFile(new URL("../components/AdminUsers.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(usersUi, /เพิ่มสมาชิกในบทบาทนี้/);
+  assert.match(usersUi, /roleCandidates/);
+  assert.match(usersUi, /selectedRoleUsers/);
+  assert.match(usersUi, /addSelectedUsersToRole/);
+  assert.match(usersUi, /เลือกได้หลายคนและบันทึกพร้อมกัน/);
+  assert.match(usersUi, /body: JSON\.stringify\(\{ roles: \[\.\.\.user\.roles, addingRole\] \}\)/);
+  assert.match(styles, /\.role-member-modal/);
+  assert.match(styles, /\.role-member-candidates/);
+  assert.match(styles, /\.user-list-heading-actions/);
+});
+
 test("routes students from cboonta advisory rooms into an owner-only first review", async () => {
   const [casesApi, caseDetailApi, uploadsApi, exclusiveReview, dashboard, schema, migration] = await Promise.all([
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),

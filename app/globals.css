@@ -523,6 +523,7 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
 .user-list-heading h2 { margin:0 0 4px; }
 .user-list-heading p { margin:0; color:var(--muted); font-size:11px; }
 .user-list-heading strong { flex:none; padding:6px 10px; border-radius:999px; color:#b72f37; background:#fff0f1; font-size:11px; }
+.user-list-heading-actions { display:flex; align-items:center; justify-content:flex-end; gap:9px; }.user-list-heading-actions .add-role-member { min-height:36px; color:#24737c; border-color:#cde5e8; background:#f1fafb; }.user-list-heading-actions .add-role-member:hover { color:#185f67; border-color:#7fc2c9; background:#e6f7f8; }
 .user-role-tabs { display:flex; gap:7px; overflow-x:auto; padding:12px 18px; border-top:1px solid #edf0f4; border-bottom:1px solid #edf0f4; scrollbar-width:thin; }
 .user-role-tabs button { display:inline-flex; flex:none; align-items:center; gap:6px; min-height:36px; padding:7px 10px; border:1px solid #dfe4eb; border-radius:10px; color:#566276; background:white; font:inherit; font-size:11px; font-weight:800; cursor:pointer; transition:.15s ease; }
 .user-role-tabs button:hover { border-color:#e7b9bd; color:#b82f37; background:#fff8f8; }
@@ -578,6 +579,7 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
 .identity-permission-card>div { display:flex; min-width:0; flex-direction:column; gap:3px; }
 .identity-permission-card b { color:#354155; font-size:12px; }
 .identity-permission-card small { color:#748092; font-size:10px; line-height:1.5; }
+.role-member-modal { width:min(620px,100%); max-height:calc(100dvh - 48px); overflow:hidden; }.role-member-body { display:grid; gap:12px; min-height:0; padding:18px 22px; }.role-member-search { position:relative; }.role-member-search>svg { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:#8a94a3; }.role-member-search input { width:100%; min-height:46px; padding:10px 13px 10px 40px; border:1px solid #dce2ea; border-radius:12px; font:inherit; }.role-member-search input:focus { border-color:#57b8c2; box-shadow:0 0 0 4px rgba(14,165,183,.1); outline:0; }.role-member-summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-radius:11px; color:#296f78; background:#eff9fa; }.role-member-summary span { font-size:11px; font-weight:700; }.role-member-summary b { font-size:16px; }.role-member-summary small { color:#698187; font-size:10px; }.role-member-candidates { display:grid; gap:7px; max-height:380px; overflow:auto; }.role-member-candidates>button { display:grid; grid-template-columns:42px minmax(0,1fr) auto; align-items:center; gap:11px; width:100%; padding:9px 11px; border:1px solid #e1e6ed; border-radius:12px; color:#3d495c; background:#fff; text-align:left; cursor:pointer; }.role-member-candidates>button:hover { border-color:#e5b7bb; background:#fffafa; }.role-member-candidates>button.selected { border-color:#dc434c; color:#a72c34; background:#fff1f2; }.role-member-candidates>button>span:nth-child(2) { min-width:0; display:flex; flex-direction:column; }.role-member-candidates>button small { color:#7a8494; }.role-member-candidates>button>svg { color:#d53b44; }.role-member-candidates .empty-state.compact { min-height:180px; }
 .advisor-account-link { grid-column:1/-1; }
 .advisor-data-explanation { display:flex; align-items:flex-start; gap:8px; margin:0 0 9px; padding:10px 11px; border:1px solid #cfe7ea; border-radius:11px; color:#24717a; background:#f2fafb; }.advisor-data-explanation>svg { margin-top:2px; flex:none; }.advisor-data-explanation small { color:#58767b; line-height:1.5; }
 .field-help { display:block; margin-top:6px; color:#758092; font-size:10px; line-height:1.45; }
@@ -636,6 +638,7 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
   .user-role-summary { grid-template-columns:1fr; }
   .user-role-tabs .identity-tab { margin-left:0; }
   .user-list-heading { align-items:flex-start; flex-direction:column; padding:15px 17px; }
+  .user-list-heading-actions { width:100%; justify-content:space-between; flex-wrap:wrap; }.user-list-heading-actions .add-role-member { flex:1; justify-content:center; }
   .user-list article { grid-template-columns:42px minmax(0,1fr) auto; }
   .user-role { grid-column:2/-1; }
   .account-status { grid-column:2; justify-self:start; }
@@ -645,6 +648,7 @@ label>span,.form-grid label>span,.action-card label>span { display:block; margin
   .admin-toast { right:16px; bottom:16px; }
   .user-form-grid { grid-template-columns:1fr; gap:13px; }
   .role-picker>div { grid-template-columns:1fr; }
+  .role-member-modal { max-height:calc(100dvh - 24px); }.role-member-body { padding:14px 16px; }.role-member-summary { align-items:flex-start; flex-direction:column; gap:2px; }.role-member-candidates { max-height:calc(100dvh - 330px); }
   .user-modal .role-help,.user-modal .advisor-account-link { grid-column:1; }
   .public-footer { padding:14px 12px; }
   .footer-developer { font-size:13px; }
