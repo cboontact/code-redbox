@@ -43,7 +43,26 @@ import {
   faUserGraduate,
   faUserShield,
   faXmark,
+  faComments,
+  faDiagramProject,
+  faEnvelopeOpenText,
+  faEyeSlash,
+  faFlagCheckered,
+  faHand,
+  faHandHoldingHeart,
+  faHeartPulse,
+  faInbox,
+  faPenToSquare,
+  faPhone,
+  faRoute,
+  faShareNodes,
+  faShieldHeart,
+  faStar,
+  faUser,
+  faUserSecret,
+  faWrench,
 } from "@fortawesome/free-solid-svg-icons";
+import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { SiCloudflare, SiNextdotjs, SiTypescript } from "react-icons/si";
 import type { CaseRecord, CaseStatus, Student } from "../lib/types";
 import { SeverityBadge, StatusBadge } from "./CaseBadge";
@@ -84,8 +103,8 @@ type Note = {
 
 const categoryIcons = [
   faUserShield,
-  faHeart,
-  faShieldHalved,
+  faHeartPulse,
+  faHand,
   faTriangleExclamation,
   faBookOpen,
   faSchool,
@@ -291,151 +310,258 @@ function AdminQuickActions() {
   );
 }
 
+function Ic({ icon, className }: { icon: IconDefinition; className?: string }) {
+  return (
+    <i className={className}>
+      <FontAwesomeIcon icon={icon} />
+    </i>
+  );
+}
+
 function PublicHeader() {
   return (
-    <header className="public-header">
-      <Link href="/" className="brand" aria-label="กล่องแดง หน้าแรก">
+    <header className="rb-header">
+      <Link href="/" className="rb-brand" aria-label="กล่องแดง หน้าแรก">
         <img
           className="school-logo"
           src="/images/chomthong-logo.png"
-          width={50}
-          height={50}
+          width={44}
+          height={44}
           alt="ตราโรงเรียนจอมทอง"
         />
         <span>
-          <strong>กล่องแดง</strong>
-          <small>RED BOX · โรงเรียนจอมทอง</small>
+          กล่องแดง
+          <small>โรงเรียนจอมทอง</small>
         </span>
       </Link>
       <nav aria-label="เมนูหลัก">
-        <Link href="/track">
-          <FontAwesomeIcon icon={faMagnifyingGlass} /> ตรวจสอบสถานะ
+        <Link href="/track" aria-label="ติดตามเรื่อง">
+          <FontAwesomeIcon icon={faMagnifyingGlass} />
+          <span>ติดตามเรื่อง</span>
         </Link>
-        <Link href="/report" className="button primary compact">
-          <FontAwesomeIcon icon={faMessage} /> แจ้งเรื่อง
-        </Link>
-        <Link
-          href="/admin/login"
-          className="button secondary compact icon-button"
-          aria-label="เข้าสู่ระบบสำหรับเจ้าหน้าที่"
-          title="สำหรับเจ้าหน้าที่"
-        >
+        <Link href="/admin/login" aria-label="เข้าสู่ระบบสำหรับเจ้าหน้าที่">
           <FontAwesomeIcon icon={faUserShield} />
+          <span>เจ้าหน้าที่</span>
+        </Link>
+        <Link href="/report" className="rb-cta">
+          <FontAwesomeIcon icon={faPaperPlane} />
+          <span>แจ้งเรื่อง</span>
         </Link>
       </nav>
     </header>
   );
 }
 
+const homeTopics: Record<string, { icon: IconDefinition; tone: string; label: string; note: string }> = {
+  bullying: { icon: faUserShield, tone: "sky", label: "การกลั่นแกล้ง", note: "โดนล้อ โดนแกล้ง โดนกีดกัน" },
+  mental: { icon: faHeartPulse, tone: "mint", label: "สุขภาพใจ", note: "เครียด กังวล อยากมีคนคุย" },
+  violence: { icon: faHand, tone: "rose", label: "ความรุนแรง", note: "ถูกทำร้าย ข่มขู่ คุกคาม" },
+  safety: { icon: faTriangleExclamation, tone: "yel", label: "ความปลอดภัย", note: "เจอสิ่งที่อาจเป็นอันตราย" },
+  study: { icon: faBookOpen, tone: "lav", label: "การเรียน", note: "เรียน งาน สอบ" },
+  facility: { icon: faSchool, tone: "orange", label: "อาคาร / สถานที่", note: "ของพัง ชำรุด ไม่สะอาด" },
+  suggestion: { icon: faLightbulb, tone: "pink", label: "ข้อเสนอแนะ", note: "ไอเดียที่อยากให้โรงเรียนทำ" },
+  other: { icon: faMessage, tone: "gray", label: "อื่น ๆ", note: "เรื่องที่ไม่ตรงกับข้อไหน" },
+};
+
+const homeSteps = [
+  { icon: faInbox, title: "เจ้าหน้าที่อ่าน", text: "ดูว่าเรื่องเร่งด่วนแค่ไหน" },
+  { icon: faShareNodes, title: "ส่งต่อครูที่เกี่ยวข้อง", text: "เรื่องหนักส่งถึงผู้บริหาร" },
+  { icon: faPeopleGroup, title: "ครูลงมือช่วย", text: "มีผู้รับผิดชอบชัดเจน" },
+  { icon: faFlagCheckered, title: "ปิดเรื่อง", text: "ตรวจผลก่อนปิดทุกครั้ง" },
+];
+
 function HomeContent() {
   return (
-    <main>
-      <section className="hero">
-        <div className="hero-copy">
-          <span className="safe-pill">
-            <FontAwesomeIcon icon={faShieldHalved} />{" "}
-            พื้นที่ปลอดภัยสำหรับนักเรียน
+    <main className="rb-home">
+      <div className="rb-hero">
+        <span className="rb-deco rb-ring" />
+        <span className="rb-deco rb-ring2" />
+        <span className="rb-deco rb-dots" />
+        <Ic className="rb-deco rb-spark rb-s1" icon={faStar} />
+        <Ic className="rb-deco rb-spark rb-s2" icon={faHeart} />
+        <div className="rb-col">
+          <span className="rb-tag">
+            <Ic icon={faShieldHeart} />
+            พื้นที่ปลอดภัยของนักเรียนจอมทอง
           </span>
           <h1>
-            ทุกเรื่องที่อยากเล่า
+            มีเรื่องอยากบอก
             <br />
-            <em>มีความหมาย</em>
+            <em>บอกได้ที่นี่</em>
           </h1>
-          <p className="hero-lead">
-            มีเรื่องไม่สบายใจ เจอปัญหา หรืออยากให้โรงเรียนช่วย บอกเราได้ที่นี่
+          <p className="rb-lead">
+            โดนแกล้ง เครียด ของในโรงเรียนพัง หรือมีไอเดียดี ๆ
+            ส่งถึงโรงเรียนได้ใน 3 นาที ไม่บอกชื่อก็ได้
           </p>
-          <div className="hero-actions">
-            <Link href="/report" className="button primary large">
-              <FontAwesomeIcon icon={faMessage} /> แจ้งปัญหา / ขอความช่วยเหลือ
+          <div className="rb-actions">
+            <Link className="rb-btn rb-white" href="/report">
+              <Ic icon={faPenToSquare} />
+              แจ้งเรื่องเลย
+              <Ic icon={faArrowRight} />
             </Link>
-            <Link href="/track" className="button secondary large">
-              <FontAwesomeIcon icon={faMagnifyingGlass} /> ตรวจสอบสถานะเรื่อง
+            <Link className="rb-btn rb-ghost" href="/track">
+              <Ic icon={faMagnifyingGlass} />
+              ติดตามเรื่อง
             </Link>
           </div>
-          <div className="trust-row">
+          <div className="rb-trust">
             <span>
-              <FontAwesomeIcon icon={faCheckCircle} /> เลือกปกปิดตัวตนได้
+              <Ic icon={faCheckCircle} />
+              เลือกปกปิดตัวตนได้
             </span>
             <span>
-              <FontAwesomeIcon icon={faCheckCircle} /> ข้อมูลได้รับการดูแล
+              <Ic icon={faCheckCircle} />
+              ข้อมูลได้รับการดูแล
+            </span>
+            <span>
+              <Ic icon={faCheckCircle} />
+              ใช้ได้บนมือถือ
             </span>
           </div>
         </div>
-        <div className="hero-art" aria-hidden="true">
-          <div className="glow one" />
-          <div className="glow two" />
-          <div className="message-card card-one">
-            <FontAwesomeIcon icon={faHeart} />
-            <span>
-              เราอยู่ตรงนี้
-              <br />
-              <b>พร้อมรับฟังเสมอ</b>
+        <div className="rb-col rb-scene" aria-hidden="true">
+          <span className="rb-sun" />
+          <div className="rb-float rb-f1">
+            <span className="rb-ava">
+              <Ic icon={faUserSecret} />
+            </span>
+            <div className="rb-bubble">
+              <small>
+                <Ic icon={faEyeSlash} />
+                ม.2 · ไม่ระบุชื่อ
+              </small>
+              เพื่อนโดนล้อในห้องทุกวัน
+            </div>
+          </div>
+          <div className="rb-float rb-f2">
+            <div className="rb-bubble rb-mint">
+              <small>
+                <Ic icon={faUser} />
+                ม.5
+              </small>
+              ก๊อกน้ำชั้น 2 เสีย
+            </div>
+            <span className="rb-ava rb-m">
+              <Ic icon={faWrench} />
             </span>
           </div>
-          <div className="red-box">
-            <div className="box-slot" />
-            <FontAwesomeIcon icon={faMessage} />
-          </div>
-          <div className="message-card card-two">
-            <FontAwesomeIcon icon={faShieldHalved} />
-            <span>
-              <b>ปลอดภัย</b>
-              <br />
-              และเป็นความลับ
+          <div className="rb-redbox">
+            <span className="rb-letter">
+              <Ic icon={faHeart} />
             </span>
+            <span className="rb-lid">
+              <span className="rb-slot" />
+            </span>
+            <span className="rb-body">
+              <span className="rb-plate">
+                <Ic icon={faEnvelopeOpenText} />
+                <b>กล่องแดง</b>
+                <small>RED BOX</small>
+              </span>
+            </span>
+            <span className="rb-ground" />
           </div>
+          <div className="rb-float rb-f3">
+            <div className="rb-bubble rb-dark">
+              <Ic icon={faCheck} />
+              รับเรื่องแล้ว กำลังส่งต่อให้ครู
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rb-bento">
+        <div className="rb-tile rb-t1">
+          <span className="rb-ico">
+            <Ic icon={faUserSecret} />
+          </span>
+          <Ic className="rb-ghosticon" icon={faUserSecret} />
+          <b>ไม่บอกชื่อก็ได้</b>
+          <span>เลือกปกปิดตัวตน ครูทั่วไปจะไม่เห็นชื่อ</span>
+        </div>
+        <div className="rb-tile rb-t2">
+          <span className="rb-ico">
+            <Ic icon={faRoute} />
+          </span>
+          <Ic className="rb-ghosticon" icon={faRoute} />
+          <b>ติดตามได้เอง</b>
+          <span>กลับมาดูได้ตลอดว่าเรื่องไปถึงไหนแล้ว</span>
+        </div>
+        <div className="rb-tile rb-t3">
+          <span className="rb-ico">
+            <Ic icon={faHandHoldingHeart} />
+          </span>
+          <Ic className="rb-ghosticon" icon={faHandHoldingHeart} />
+          <b>มีคนรับเรื่องจริง</b>
+          <span>ทุกเรื่องมีครูผู้รับผิดชอบ ไม่หายเงียบ</span>
+        </div>
+      </div>
+
+      <section>
+        <span className="rb-kicker">
+          <Ic icon={faComments} />
+          บอกได้ทุกเรื่อง
+        </span>
+        <h2>
+          อยากบอก<u>เรื่องอะไร</u>
+        </h2>
+        <p className="rb-sub">แตะหัวข้อที่ใกล้ที่สุดได้เลย ไม่ต้องกลัวเลือกผิด</p>
+        <div className="rb-topics">
+          {categoryFallbacks.map((category) => {
+            const topic = homeTopics[category.id];
+            return (
+              <Link className="rb-topic" href="/report" key={category.id}>
+                <span className={`rb-dot rb-c-${topic.tone}`}>
+                  <Ic icon={topic.icon} />
+                </span>
+                <span className="rb-go">
+                  <Ic icon={faArrowRight} />
+                </span>
+                <span>
+                  {topic.label}
+                  <small>{topic.note}</small>
+                </span>
+              </Link>
+            );
+          })}
         </div>
       </section>
 
-      <section className="category-section">
-        <div className="section-heading">
-          <span>บอกเราได้ทุกเรื่อง</span>
-          <h2>เรื่องไหนที่อยากให้เราช่วย?</h2>
-          <p>เลือกหัวข้อที่ใกล้เคียงที่สุด ไม่ต้องกังวลว่าจะเลือกผิด</p>
-        </div>
-        <div className="category-grid">
-          {categoryFallbacks.map((category, index) => (
-            <Link
-              href="/report"
-              key={category.id}
-              className={`category-card tone-${category.color}`}
-            >
-              <span className="category-icon">
-                <FontAwesomeIcon icon={categoryIcons[index]} />
+      <section>
+        <span className="rb-kicker">
+          <Ic icon={faDiagramProject} />
+          ขั้นตอน
+        </span>
+        <h2>
+          ส่งแล้ว<u>เกิดอะไรขึ้น</u>
+        </h2>
+        <div className="rb-steps">
+          {homeSteps.map((step, index) => (
+            <div className="rb-step" key={step.title}>
+              <span className="rb-num">
+                <Ic icon={step.icon} />
+                <em>{index + 1}</em>
               </span>
-              <strong>{category.name}</strong>
-              <FontAwesomeIcon
-                className="category-arrow"
-                icon={faChevronRight}
-              />
-            </Link>
+              <b>{step.title}</b>
+              <p>{step.text}</p>
+            </div>
           ))}
         </div>
       </section>
 
-      <section className="promise-section">
+      <div className="rb-sos">
+        <span className="rb-bell">
+          <Ic icon={faBell} />
+        </span>
         <div>
-          <span className="eyebrow">คำสัญญาจากเรา</span>
-          <h2>ไม่ต้องรับมือกับเรื่องนี้เพียงลำพัง</h2>
+          <b>อันตรายตอนนี้เลย?</b>
+          อย่ารอระบบ บอกครูที่อยู่ใกล้ที่สุด หรือโทรหากิจการนักเรียนทันที
         </div>
-        <div className="promise-grid">
-          <article>
-            <FontAwesomeIcon icon={faPeopleGroup} />
-            <h3>มีคนรับฟัง</h3>
-            <p>เจ้าหน้าที่ที่เหมาะสมจะรับฟังและช่วยดูแลอย่างตั้งใจ</p>
-          </article>
-          <article>
-            <FontAwesomeIcon icon={faShieldHalved} />
-            <h3>เคารพความเป็นส่วนตัว</h3>
-            <p>เลือกปกปิดชื่อจากเจ้าหน้าที่ทั่วไปได้</p>
-          </article>
-          <article>
-            <FontAwesomeIcon icon={faClock} />
-            <h3>ติดตามได้</h3>
-            <p>ใช้หมายเลขเคสตรวจสอบความคืบหน้าได้ทุกเวลา</p>
-          </article>
-        </div>
-      </section>
+        <a href="tel:053341550">
+          <Ic icon={faPhone} />
+          กิจการนักเรียน 053-341-550
+        </a>
+      </div>
     </main>
   );
 }
@@ -942,7 +1068,7 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
                     <b>เราจะส่งเรื่องนี้ให้เจ้าหน้าที่ตรวจสอบทันที</b>
                     <small>
                       หากอยู่ในอันตรายเร่งด่วน
-                      ให้ติดต่อครูที่อยู่ใกล้ที่สุดหรือโทร 191
+                      ให้ติดต่อครูที่อยู่ใกล้ที่สุด หรือโทรกิจการนักเรียน 053-341-550
                     </small>
                   </span>
                 </div>

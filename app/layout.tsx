@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import "./globals.css";
+import "./bright.css";
+import "./home.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();

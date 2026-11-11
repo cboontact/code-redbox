@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&family=Anuphan:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 :root { --red:#e5484d; --red-dark:#c9323a; --ink:#172033; --muted:#667085; --line:#e6eaf0; --bg:#f7f9fc; --white:#fff; --cyan:#0ea5b7; --green:#16a36a; --amber:#e5a10b; --orange:#ec6a25; }
