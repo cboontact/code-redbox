@@ -581,25 +581,43 @@ test("distinguishes unauthenticated and unauthorized executive requests", async 
   for (const route of routes) assert.match(route, /session \? 403 : 401/);
 });
 
-test("uses a new private hashed tracking password for every submitted case", async () => {
-  const [dashboard, casesApi] = await Promise.all([
+test("uses the student's protected Thai person number or education G code for submission and tracking", async () => {
+  const [dashboard, casesApi, trackingApi, password, identity, schema, sequenceRepair] = await Promise.all([
     readFile(new URL("../components/RedBoxApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/cases/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cases/track/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/password.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/student-identity.ts", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0011_student_identity_number.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0010_repair_failed_case_sequence.sql", import.meta.url), "utf8"),
   ]);
   const tracking = dashboard.slice(dashboard.indexOf("function Tracking"), dashboard.indexOf("function AdminDashboard"));
-  assert.match(tracking, /studentCode=/);
-  assert.match(tracking, /trackingPassword=/);
+  assert.match(tracking, /JSON\.stringify\(\{ studentCode, credential:/);
+  assert.match(tracking, /\/api\/cases\/track/);
+  assert.match(tracking, /method: "POST"/);
+  assert.doesNotMatch(tracking, /credential=\$\{/);
   assert.doesNotMatch(tracking, /setCaseNumber/);
   assert.match(tracking, /เรื่องที่ส่งไว้/);
-  assert.match(casesApi, /WHERE s\.student_code=\? ORDER BY c\.created_at DESC/);
-  assert.match(casesApi, /verifyPassword/);
-  assert.match(casesApi, /hashPassword/);
-  assert.match(casesApi, /c\.tracking_password_hash/);
+  assert.match(trackingApi, /SELECT id,identity_number_hash FROM students WHERE student_code=\?/);
+  assert.match(trackingApi, /verifyStudentIdentity/);
+  assert.doesNotMatch(casesApi, /hashPassword/);
+  assert.match(password, /student-identity-hmac-sha256/);
+  assert.match(password, /STUDENT_IDENTITY_PEPPER/);
+  assert.match(identity, /\^G\\d\{12\}\$/);
+  assert.match(identity, /\(11 - \(sum % 11\)\) % 10/);
+  assert.match(identity, /\^\[0-8\]\\d\{12\}\$/);
+  assert.match(schema, /identity_number_hash/);
   assert.match(casesApi, /INSERT INTO cases/);
-  assert.match(dashboard, /รีเซ็ตรหัสติดตาม/);
-  assert.match(dashboard, /resetTrackingPassword/);
-  assert.match(casesApi, /SELECT c\.case_number,c\.status,c\.created_at,c\.tracking_password_hash,cc\.name category_name/);
+  assert.doesNotMatch(dashboard, /รีเซ็ตรหัสติดตาม/);
+  assert.doesNotMatch(dashboard, /resetTrackingPassword/);
+  assert.match(trackingApi, /SELECT c\.case_number,c\.status,c\.created_at,c\.tracking_password_hash,cc\.name category_name/);
   assert.doesNotMatch(casesApi, /SELECT c\.case_number,c\.title,c\.status/);
+  assert.match(dashboard, /idempotencyKeyRef = useRef<string \| null>\(null\)/);
+  assert.match(dashboard, /idempotencyKey: idempotencyKeyRef\.current/);
+  assert.match(casesApi, /SELECT id FROM case_categories WHERE id=\? AND is_active=1/);
+  assert.ok(casesApi.indexOf("verifyStudentIdentity(input.data.identityNumber") < casesApi.indexOf("INSERT INTO case_sequences"));
+  assert.match(sequenceRepair, /UPDATE case_sequences/);
+  assert.match(sequenceRepair, /MAX\(CAST\(substr\(c\.case_number, 9\) AS INTEGER\)\)/);
 });
 
 test("uses slow peppered password hashing while retaining legacy verification", async () => {

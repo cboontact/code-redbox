@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { createId, ensureDatabase } from "../../../../db/bootstrap";
 import { jsonError, requireAdmin } from "../../../../lib/security";
+import { hashStudentIdentity } from "../../../../lib/password";
+import { isValidStudentIdentity, normalizeStudentIdentity } from "../../../../lib/student-identity";
 
 const studentSchema = z.object({
   studentCode: z.string().trim().regex(/^\d{4,10}$/),
@@ -10,6 +12,7 @@ const studentSchema = z.object({
   level: z.enum(["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"]),
   classroom: z.string().trim().regex(/^\d{1,2}$/),
   isActive: z.boolean().optional(),
+  identityNumber: z.string().transform(normalizeStudentIdentity).refine(isValidStudentIdentity).optional(),
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -26,11 +29,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       const last = await db.prepare("SELECT COALESCE(MAX(number),0) number FROM students WHERE level=? AND classroom=?").bind(input.data.level, input.data.classroom).first<{ number: number }>();
       number = Number(last?.number ?? 0) + 1;
     }
+    const identityHash = input.data.identityNumber ? await hashStudentIdentity(input.data.identityNumber) : null;
     await db.batch([
-      db.prepare(`UPDATE students SET student_code=?,prefix=?,first_name=?,last_name=?,level=?,classroom=?,number=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-        .bind(input.data.studentCode, input.data.prefix, input.data.firstName, input.data.lastName, input.data.level, input.data.classroom, number, input.data.isActive === undefined ? existing.is_active : (input.data.isActive ? 1 : 0), id),
+      db.prepare(`UPDATE students SET student_code=?,prefix=?,first_name=?,last_name=?,level=?,classroom=?,number=?,is_active=?,identity_number_hash=COALESCE(?,identity_number_hash),updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .bind(input.data.studentCode, input.data.prefix, input.data.firstName, input.data.lastName, input.data.level, input.data.classroom, number, input.data.isActive === undefined ? existing.is_active : (input.data.isActive ? 1 : 0), identityHash, id),
       db.prepare("INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)")
-        .bind(createId("audit"), "UPDATE_STUDENT", "student", id, actor, JSON.stringify(input.data)),
+        .bind(createId("audit"), "UPDATE_STUDENT", "student", id, actor, JSON.stringify({ ...input.data, identityNumber: input.data.identityNumber ? "[REDACTED]" : undefined })),
     ]);
     return Response.json({ success: true });
   } catch (error) {

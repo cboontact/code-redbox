@@ -23,7 +23,7 @@ export interface Student {
   advisor_names: string[];
   advisor1: string;
   advisor2: string | null;
-  has_tracking_password?: number;
+  has_identity_number?: number;
 }
 
 export interface CaseRecord {

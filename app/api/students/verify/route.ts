@@ -21,7 +21,7 @@ export async function POST(request: Request) {
        )
        SELECT s.id,s.student_code,s.prefix,s.first_name,s.last_name,s.level,s.classroom,
        s.auto_number number,s.advisor1 legacy_advisor1,s.advisor2 legacy_advisor2,
-       CASE WHEN s.tracking_password_hash IS NULL THEN 0 ELSE 1 END has_tracking_password
+       CASE WHEN s.identity_number_hash IS NULL THEN 0 ELSE 1 END has_identity_number
        FROM ranked s
        WHERE s.student_code=?`,
     ).bind(input.data.studentCode).first<Record<string, unknown>>();

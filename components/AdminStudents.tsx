@@ -34,6 +34,7 @@ type StudentRow = {
   advisor2: string | null;
   is_active: number;
   case_count: number;
+  has_identity_number: number;
 };
 
 type StudentResponse = {
@@ -54,9 +55,10 @@ type StudentForm = {
   level: "ม.1" | "ม.2" | "ม.3" | "ม.4" | "ม.5" | "ม.6";
   classroom: string;
   isActive: boolean;
+  identityNumber: string;
 };
 
-const emptyForm: StudentForm = { id: "", studentCode: "", prefix: "นาย", firstName: "", lastName: "", level: "ม.1", classroom: "1", isActive: true };
+const emptyForm: StudentForm = { id: "", studentCode: "", prefix: "นาย", firstName: "", lastName: "", level: "ม.1", classroom: "1", isActive: true, identityNumber: "" };
 const studentPrefixes = ["เด็กชาย", "เด็กหญิง", "นาย", "นางสาว"] as const;
 const levels = ["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"] as const;
 
@@ -141,6 +143,7 @@ export function AdminStudents() {
       level: student.level as StudentForm["level"],
       classroom: student.classroom,
       isActive: Boolean(student.is_active),
+      identityNumber: "",
     });
     setError("");
     setShowForm(true);
@@ -229,7 +232,7 @@ export function AdminStudents() {
                 <thead><tr><th>นักเรียน</th><th>ชั้น / เลขที่</th><th>ครูที่ปรึกษา</th><th>จำนวนเคส</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
                 <tbody>{students.map((student) => (
                   <tr key={student.id}>
-                    <td data-label="นักเรียน"><div className="student-identity"><b>{student.prefix}{student.first_name} {student.last_name}</b><small>รหัส {student.student_code}</small></div></td>
+                    <td data-label="นักเรียน"><div className="student-identity"><b>{student.prefix}{student.first_name} {student.last_name}</b><small>รหัส {student.student_code} · {student.has_identity_number ? "พร้อมยืนยันตัวตน" : "ยังไม่มีเลขยืนยันตัวตน"}</small></div></td>
                     <td data-label="ชั้น / เลขที่"><div className="student-room"><b>{student.level}/{student.classroom}</b><small>เลขที่ {student.number}</small></div></td>
                     <td data-label="ครูที่ปรึกษา"><span className="advisor-names">{student.advisors.length > 0 ? student.advisors.map((advisor) => <span key={advisor.id}>{advisor.display_name}</span>) : "ยังไม่กำหนด"}</span></td>
                     <td data-label="จำนวนเคส"><b>{student.case_count}</b></td>
@@ -252,6 +255,7 @@ export function AdminStudents() {
           <header className="student-modal-header"><div><span className="student-modal-icon"><FontAwesomeIcon icon={form.id ? faPen : faPlus} /></span><div><small>{form.id ? "แก้ไขรายการเดิม" : "สร้างรายการใหม่"}</small><h2 id="student-modal-title">{form.id ? "แก้ไขข้อมูลนักเรียน" : "เพิ่มนักเรียน"}</h2></div></div><button type="button" onClick={() => { setShowForm(false); setForm(emptyForm); setError(""); }} disabled={saving} aria-label="ปิด Modal"><FontAwesomeIcon icon={faXmark} /></button></header>
           <div className="student-modal-body"><p className="student-modal-help">กรอกข้อมูลพื้นฐานให้ครบ เลขที่และครูที่ปรึกษาจะจัดเรียงและเชื่อมตามห้องโดยอัตโนมัติ</p>{error && <div className="student-modal-error"><FontAwesomeIcon icon={faXmark} /> {error}</div>}<div className="student-form-grid">
             <label><span>รหัสนักเรียน</span><input autoFocus value={form.studentCode} onChange={(event) => setForm({ ...form, studentCode: event.target.value.replace(/\D/g, "").slice(0, 10) })} inputMode="numeric" minLength={4} placeholder="เช่น 12345" required /></label>
+            <label><span>เลขประจำตัวบุคคล / รหัส G</span><input value={form.identityNumber} onChange={(event) => setForm({ ...form, identityNumber: event.target.value.toUpperCase().replace(/[^0-9G๐-๙\s-]/g, "").slice(0, 17) })} autoComplete="off" placeholder={form.id ? "เว้นว่างหากไม่เปลี่ยน" : "เลข 13 หลัก หรือ G ตามด้วย 12 หลัก"} required={!form.id} /><small>{form.id ? "กรอกเฉพาะเมื่อต้องการแก้เลขยืนยันตัวตนเดิม" : "ระบบจะเก็บเฉพาะค่าแฮช ไม่เก็บเลขจริง"}</small></label>
             <label><span>คำนำหน้า</span><select value={form.prefix} onChange={(event) => setForm({ ...form, prefix: event.target.value as StudentForm["prefix"] })}>{studentPrefixes.map((prefix) => <option key={prefix}>{prefix}</option>)}</select></label>
             <label><span>ชื่อ</span><input value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} placeholder="ชื่อจริง" required /></label>
             <label><span>นามสกุล</span><input value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} placeholder="นามสกุล" required /></label>

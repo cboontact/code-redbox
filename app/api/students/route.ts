@@ -2,6 +2,8 @@ import { z } from "zod";
 import { createId, ensureDatabase } from "../../../db/bootstrap";
 import { advisorRoomKey, attachAdvisorData, loadAdvisorMap } from "../../../lib/student-advisors";
 import { jsonError, requireAdmin } from "../../../lib/security";
+import { hashStudentIdentity } from "../../../lib/password";
+import { isValidStudentIdentity, normalizeStudentIdentity } from "../../../lib/student-identity";
 
 const studentSchema = z.object({
   studentCode: z.string().trim().regex(/^\d{4,10}$/),
@@ -10,6 +12,7 @@ const studentSchema = z.object({
   lastName: z.string().trim().min(1).max(80),
   level: z.enum(["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"]),
   classroom: z.string().trim().regex(/^\d{1,2}$/),
+  identityNumber: z.string().transform(normalizeStudentIdentity).refine(isValidStudentIdentity),
 });
 
 export async function POST(request: Request) {
@@ -21,10 +24,10 @@ export async function POST(request: Request) {
     const last = await db.prepare("SELECT COALESCE(MAX(number),0) number FROM students WHERE level=? AND classroom=?").bind(input.data.level, input.data.classroom).first<{ number: number }>();
     const id = createId("student");
     await db.batch([
-      db.prepare(`INSERT INTO students (id,student_code,prefix,first_name,last_name,level,classroom,number,advisor1,advisor2)
-        VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(id, input.data.studentCode, input.data.prefix, input.data.firstName, input.data.lastName, input.data.level, input.data.classroom, Number(last?.number ?? 0) + 1, "เชื่อมตามห้องอัตโนมัติ", null),
+      db.prepare(`INSERT INTO students (id,student_code,prefix,first_name,last_name,level,classroom,number,advisor1,advisor2,identity_number_hash)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id, input.data.studentCode, input.data.prefix, input.data.firstName, input.data.lastName, input.data.level, input.data.classroom, Number(last?.number ?? 0) + 1, "เชื่อมตามห้องอัตโนมัติ", null, await hashStudentIdentity(input.data.identityNumber)),
       db.prepare("INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)")
-        .bind(createId("audit"), "CREATE_STUDENT", "student", id, actor, JSON.stringify(input.data)),
+        .bind(createId("audit"), "CREATE_STUDENT", "student", id, actor, JSON.stringify({ ...input.data, identityNumber: "[REDACTED]" })),
     ]);
     return Response.json({ success: true, id }, { status: 201 });
   } catch (error) {
@@ -63,7 +66,7 @@ export async function GET(request: Request) {
        )
        SELECT s.id,s.student_code,s.prefix,s.first_name,s.last_name,s.level,s.classroom,
        s.auto_number number,s.advisor1 legacy_advisor1,s.advisor2 legacy_advisor2,
-       s.is_active,COUNT(c.id) case_count
+       s.is_active,CASE WHEN s.identity_number_hash IS NULL THEN 0 ELSE 1 END has_identity_number,COUNT(c.id) case_count
        FROM ranked s
        LEFT JOIN cases c ON c.student_id=s.id
        WHERE (?='' OR s.student_code LIKE ? OR s.first_name LIKE ? OR s.last_name LIKE ?)

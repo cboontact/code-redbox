@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { copyFile, mkdir, readFile, readdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
+import { createHmac } from "node:crypto";
 
 const csvPath = resolve(process.argv[2] ?? "");
 if (!process.argv[2] || !csvPath.endsWith(".csv")) {
@@ -45,6 +46,19 @@ const [headers, ...rawRows] = parseCsv(source);
 const required = ["เลขที่", "เลขประจำตัว", "เลขบัตรนักเรียน", "คำนำหน้า", "ชื่อ", "นามสกุล", "ระดับชั้น", "ห้อง"];
 for (const column of required) if (!headers.includes(column)) throw new Error(`ไม่พบคอลัมน์ ${column}`);
 const at = Object.fromEntries(headers.map((header, index) => [header, index]));
+const identityHeader = ["เลขประจำตัวประชาชน", "เลขประชาชน", "เลขประจำตัวบุคคล", "รหัส G"].find((header) => headers.includes(header));
+const identityPepper = process.env.STUDENT_IDENTITY_PEPPER ?? process.env.SESSION_SECRET ?? "";
+if (identityHeader && identityPepper.length < 32) throw new Error("ไฟล์มีเลขประจำตัวบุคคล กรุณากำหนด STUDENT_IDENTITY_PEPPER อย่างน้อย 32 ตัวอักษรก่อนนำเข้า");
+const thaiDigits = "๐๑๒๓๔๕๖๗๘๙";
+const normalizeIdentity = (value) => clean(value).toUpperCase().replace(/[๐-๙]/g, (digit) => String(thaiDigits.indexOf(digit))).replace(/[\s-]/g, "");
+const validIdentity = (value) => {
+  if (/^G\d{12}$/.test(value)) return true;
+  if (!/^[0-8]\d{12}$/.test(value)) return false;
+  const digits = [...value].map(Number);
+  const sum = digits.slice(0, 12).reduce((total, digit, index) => total + digit * (13 - index), 0);
+  return (11 - (sum % 11)) % 10 === digits[12];
+};
+const identityHash = (value) => `student-identity-hmac-sha256$${createHmac("sha256", identityPepper).update(`student-identity-v1:${value}`).digest("base64")}`;
 const allowedPrefixes = new Set(["เด็กชาย", "เด็กหญิง", "นาย", "นางสาว"]);
 const students = [];
 const seenCodes = new Set();
@@ -62,10 +76,13 @@ for (let index = 0; index < rawRows.length; index += 1) {
   if (seenCodes.has(studentCode)) throw new Error(`เลขประจำตัวซ้ำ: ${studentCode}`);
   seenCodes.add(studentCode);
   const card = clean(row[at["เลขบัตรนักเรียน"]]);
+  const identity = identityHeader ? normalizeIdentity(row[at[identityHeader]]) : "";
+  if (identityHeader && !validIdentity(identity)) throw new Error(`เลขประจำตัวบุคคลหรือรหัส G ไม่ถูกต้องในแถว ${index + 2}`);
   students.push({
     id: `student-real-${studentCode}`,
     studentCode,
     studentCardNumber: !card || card.toUpperCase() === "NO RFID" ? null : card,
+    identityNumberHash: identity ? identityHash(identity) : null,
     prefix,
     firstName,
     lastName,
@@ -99,6 +116,7 @@ const db = new DatabaseSync(databaseFile);
 db.exec("PRAGMA foreign_keys=ON");
 const columns = db.prepare("PRAGMA table_info(students)").all().map((item) => item.name);
 if (!columns.includes("student_card_number")) db.exec("ALTER TABLE students ADD COLUMN student_card_number TEXT");
+if (!columns.includes("identity_number_hash")) db.exec("ALTER TABLE students ADD COLUMN identity_number_hash TEXT");
 db.exec("BEGIN IMMEDIATE");
 try {
   const demoCases = "SELECT id FROM cases WHERE id LIKE 'demo-case-%'";
@@ -111,13 +129,13 @@ try {
   db.prepare("DELETE FROM cases WHERE id LIKE 'demo-case-%'").run();
   db.prepare("UPDATE students SET is_active=0,updated_at=CURRENT_TIMESTAMP").run();
   const upsert = db.prepare(`INSERT INTO students
-    (id,student_code,student_card_number,prefix,first_name,last_name,level,classroom,number,advisor1,advisor2,is_active,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,NULL,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+    (id,student_code,student_card_number,identity_number_hash,prefix,first_name,last_name,level,classroom,number,advisor1,advisor2,is_active,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
     ON CONFLICT(student_code) DO UPDATE SET student_card_number=excluded.student_card_number,prefix=excluded.prefix,
     first_name=excluded.first_name,last_name=excluded.last_name,level=excluded.level,classroom=excluded.classroom,
-    number=excluded.number,advisor1=excluded.advisor1,advisor2=NULL,is_active=1,updated_at=CURRENT_TIMESTAMP`);
+    number=excluded.number,advisor1=excluded.advisor1,advisor2=NULL,identity_number_hash=COALESCE(excluded.identity_number_hash,students.identity_number_hash),is_active=1,updated_at=CURRENT_TIMESTAMP`);
   for (const student of students) {
-    upsert.run(student.id, student.studentCode, student.studentCardNumber, student.prefix, student.firstName, student.lastName, student.level, student.classroom, student.number, "เชื่อมตามห้องอัตโนมัติ");
+    upsert.run(student.id, student.studentCode, student.studentCardNumber, student.identityNumberHash, student.prefix, student.firstName, student.lastName, student.level, student.classroom, student.number, "เชื่อมตามห้องอัตโนมัติ");
   }
   db.prepare("DELETE FROM students WHERE is_active=0 AND id NOT IN (SELECT DISTINCT student_id FROM cases)").run();
   db.exec("COMMIT");
@@ -131,6 +149,7 @@ const result = {
   activeStudents: db.prepare("SELECT COUNT(*) total FROM students WHERE is_active=1").get().total,
   rooms: db.prepare("SELECT COUNT(*) total FROM (SELECT level,classroom FROM students WHERE is_active=1 GROUP BY level,classroom)").get().total,
   withCard: db.prepare("SELECT COUNT(*) total FROM students WHERE is_active=1 AND student_card_number IS NOT NULL").get().total,
+  withIdentity: db.prepare("SELECT COUNT(*) total FROM students WHERE is_active=1 AND identity_number_hash IS NOT NULL").get().total,
   historicalStudents: db.prepare("SELECT COUNT(*) total FROM students WHERE is_active=0").get().total,
 };
 db.close();

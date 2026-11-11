@@ -2,7 +2,6 @@ import { z } from "zod";
 import { env } from "cloudflare:workers";
 import { createId, ensureDatabase } from "../../../../db/bootstrap";
 import { jsonError, requireCaseSession } from "../../../../lib/security";
-import { hashPassword } from "../../../../lib/password";
 import { attachAdvisorData, loadRoomAdvisors } from "../../../../lib/student-advisors";
 import { sessionCanViewStudentIdentity, sessionHasAnyRole, sessionHasRole } from "../../../../lib/admin-auth";
 import { describeCaseUpdate, humanizeTimelineEntry, timelineTitleForUpdate } from "../../../../lib/case-timeline";
@@ -19,7 +18,6 @@ const updateSchema = z.object({
   noteId: z.string().trim().min(1).max(120).optional(),
   handoffReason: z.string().trim().max(1000).optional(),
   dueDate: z.string().date().optional(),
-  resetTrackingPassword: z.string().regex(/^\d{6}$/).optional(),
 });
 
 type CaseItem = { id: string; status: string; severity: string; assigned_to: string | null; exclusive_reviewer_username: string | null; is_anonymous: number; level: string; classroom: string };
@@ -101,7 +99,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       : null;
     if (!(isSuper || isIntake || participant || isLead || roomAccess || (isAffairs && item.status === "AFFAIRS_REVIEW"))) return jsonError("ไม่มีสิทธิ์แก้ไขเคสนี้", 403);
     if (input.data.note && !(isSuper || isIntake || participant || isLead || (isAffairs && item.status === "AFFAIRS_REVIEW"))) return jsonError("ต้องได้รับมอบหมายก่อนจึงจะเพิ่มบันทึกภายในได้", 403);
-    if (input.data.resetTrackingPassword && !isSuper) return jsonError("เฉพาะแอดมินระบบเท่านั้นที่รีเซ็ตรหัสติดตามได้", 403);
     if (input.data.severity !== undefined && !isSuper && !isIntake) return jsonError("เฉพาะเจ้าหน้าที่รับเรื่องที่ปรับระดับความรุนแรงได้", 403);
     if (input.data.severity !== undefined && !["NEW", "REOPENED"].includes(item.status)) return jsonError("ระดับความสำคัญถูกยืนยันแล้วหลังส่งต่อเคส จึงไม่สามารถแก้ไขได้", 409);
     if (input.data.assignedTo !== undefined && !isSuper && !(isIntake && ["SCREENING", "ASSIGNED"].includes(item.status))) {
@@ -140,10 +137,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
     }
 
     const batch: D1PreparedStatement[] = [];
-    if (input.data.resetTrackingPassword) {
-      batch.push(db.prepare("UPDATE cases SET tracking_password_hash=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(await hashPassword(input.data.resetTrackingPassword), item.id));
-      batch.push(db.prepare("INSERT INTO case_timeline (id,case_id,action,title,description,created_by) VALUES (?,?,?,?,?,?)").bind(createId("timeline"), item.id, "RESET_TRACKING_PASSWORD", "รีเซ็ตรหัสติดตาม", "แอดมินระบบตั้งรหัสติดตามใหม่", actor));
-    }
     if (input.data.note) {
       if (input.data.noteId) {
         const existingNote = await db.prepare("SELECT id FROM case_notes WHERE id=? AND case_id=? AND is_editable=1").bind(input.data.noteId, item.id).first();
@@ -178,7 +171,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ caseN
       const description = input.data.assignees ? `ผู้รับผิดชอบหลัก: ${assigneeRows.find((row) => row.username === input.data.leadAssignee)?.display_name ?? input.data.leadAssignee}\nทีมดำเนินการ: ${teamNames}${input.data.handoffReason ? `\nรายละเอียด: ${input.data.handoffReason}` : ""}` : describeCaseUpdate(input.data);
       batch.push(db.prepare("INSERT INTO case_timeline (id,case_id,action,title,description,created_by) VALUES (?,?,?,?,?,?)").bind(createId("timeline"), item.id, input.data.assignees ? "ASSIGN_TEAM" : "UPDATE_CASE", title, description, actor));
     }
-    batch.push(db.prepare("INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)").bind(createId("audit"), input.data.resetTrackingPassword ? "RESET_TRACKING_PASSWORD" : input.data.assignees ? "ASSIGN_CASE_TEAM" : "UPDATE_CASE", "case", item.id, actor, JSON.stringify({ ...input.data, resetTrackingPassword: input.data.resetTrackingPassword ? "[REDACTED]" : undefined })));
+    batch.push(db.prepare("INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)").bind(createId("audit"), input.data.assignees ? "ASSIGN_CASE_TEAM" : "UPDATE_CASE", "case", item.id, actor, JSON.stringify(input.data)));
     await db.batch(batch);
     return Response.json({ success: true });
   } catch (error) {

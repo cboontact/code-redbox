@@ -71,6 +71,20 @@
       "when": 1793678400000,
       "tag": "0009_owner_advisor_exclusive_review",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794283200000,
+      "tag": "0010_repair_failed_case_sequence",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794286800000,
+      "tag": "0011_student_identity_number",
+      "breakpoints": true
     }
   ]
 }

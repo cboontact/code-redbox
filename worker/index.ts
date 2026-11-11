@@ -7,6 +7,7 @@ interface Env {
   DB: D1Database;
   EVIDENCE: R2Bucket;
   SESSION_SECRET: string;
+  STUDENT_IDENTITY_PEPPER?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {

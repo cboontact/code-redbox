@@ -165,6 +165,9 @@ export async function ensureDatabase() {
   if (!studentColumns.results.some((column) => column.name === "student_card_number")) {
     await env.DB.prepare("ALTER TABLE students ADD COLUMN student_card_number TEXT").run();
   }
+  if (!studentColumns.results.some((column) => column.name === "identity_number_hash")) {
+    await env.DB.prepare("ALTER TABLE students ADD COLUMN identity_number_hash TEXT").run();
+  }
   const caseColumns = await env.DB.prepare("PRAGMA table_info(cases)").all<{ name: string }>();
   if (!caseColumns.results.some((column) => column.name === "upload_token_hash")) {
     await env.DB.prepare("ALTER TABLE cases ADD COLUMN upload_token_hash TEXT").run();

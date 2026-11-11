@@ -17,6 +17,11 @@ function sessionSecret() {
   return secret;
 }
 
+function studentIdentitySecret() {
+  const identitySecret = (env as unknown as { STUDENT_IDENTITY_PEPPER?: string }).STUDENT_IDENTITY_PEPPER;
+  return identitySecret && identitySecret.length >= 32 ? identitySecret : sessionSecret();
+}
+
 async function hmac(password: string, saltText: string) {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -26,6 +31,17 @@ async function hmac(password: string, saltText: string) {
     ["sign"],
   );
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${saltText}:${password}`)));
+}
+
+async function identityHmac(identity: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(studentIdentitySecret()),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`student-identity-v1:${identity}`)));
 }
 
 const passwordHashIterations = 210_000;
@@ -54,6 +70,36 @@ function equal(left: Uint8Array, right: Uint8Array) {
 export async function hashPassword(password: string) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   return `pbkdf2-sha256$${passwordHashIterations}$${encode(salt)}$${encode(await pbkdf2(password, salt, passwordHashIterations, 32))}`;
+}
+
+// Tracking codes are short-lived, server-peppered secrets rather than staff
+// passwords. HMAC keeps them non-reversible without spending the Worker's CPU
+// budget on PBKDF2 for every student submission.
+export async function hashTrackingPassword(password: string) {
+  const saltText = encode(crypto.getRandomValues(new Uint8Array(16)));
+  return `tracking-hmac-sha256$${saltText}$${encode(await hmac(password, saltText))}`;
+}
+
+export async function verifyTrackingPassword(password: string, stored: string) {
+  const fields = stored.split("$");
+  if (fields[0] === "tracking-hmac-sha256" && fields.length === 3) {
+    return equal(await hmac(password, fields[1]), decode(fields[2]));
+  }
+  // Cases created before this fix used the general password formats.
+  return verifyPassword(password, stored);
+}
+
+// A student's person number is never stored in plaintext. This deterministic,
+// domain-separated HMAC lets the server compare it with the registry value
+// without exposing the original number in D1 or API responses.
+export async function hashStudentIdentity(identity: string) {
+  return `student-identity-hmac-sha256$${encode(await identityHmac(identity))}`;
+}
+
+export async function verifyStudentIdentity(identity: string, stored: string) {
+  const fields = stored.split("$");
+  return fields[0] === "student-identity-hmac-sha256" && fields.length === 2
+    && equal(await identityHmac(identity), decode(fields[1]));
 }
 
 export async function verifyPassword(password: string, stored: string) {

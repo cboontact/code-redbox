@@ -5,6 +5,7 @@ export const students = sqliteTable("students", {
   id: text("id").primaryKey(),
   studentCode: text("student_code").notNull().unique(),
   studentCardNumber: text("student_card_number"),
+  identityNumberHash: text("identity_number_hash"),
   trackingPasswordHash: text("tracking_password_hash"),
   prefix: text("prefix").notNull(),
   firstName: text("first_name").notNull(),

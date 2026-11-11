@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { createId, ensureDatabase } from "../../../db/bootstrap";
 import { jsonError, requireCaseSession } from "../../../lib/security";
-import { hashPassword, verifyPassword } from "../../../lib/password";
+import { hashTrackingPassword, verifyStudentIdentity } from "../../../lib/password";
+import { isValidStudentIdentity, normalizeStudentIdentity } from "../../../lib/student-identity";
 import { createOpaqueToken, hashOpaqueToken } from "../../../lib/opaque-token";
 import { sessionCanViewStudentIdentity, sessionHasAnyRole, sessionHasRole } from "../../../lib/admin-auth";
 import { findExclusiveReviewerForRoom } from "../../../lib/exclusive-review";
@@ -33,7 +34,8 @@ const createSchema = z.object({
   safetyLevel: z.enum(["SAFE", "UNSURE", "UNSAFE"]),
   isAnonymous: z.boolean(),
   idempotencyKey: z.string().uuid(),
-  trackingPassword: z.string().regex(/^\d{6}$/),
+  identityNumber: z.string().transform(normalizeStudentIdentity).refine(isValidStudentIdentity).optional(),
+  trackingPassword: z.string().regex(/^\d{6}$/).optional(),
 });
 
 function yearInBangkok() {
@@ -45,8 +47,15 @@ export async function POST(request: Request) {
     const input = createSchema.safeParse(await request.json());
     if (!input.success) return jsonError("ตรวจข้อมูลที่จำเป็นให้ครบก่อนส่งเรื่องนะ");
     const db = await ensureDatabase();
-    const studentAccess = await db.prepare("SELECT id,level,classroom FROM students WHERE id=? AND is_active=1").bind(input.data.studentId).first<{ id: string; level: string; classroom: string }>();
+    const studentAccess = await db.prepare("SELECT id,level,classroom,identity_number_hash FROM students WHERE id=? AND is_active=1").bind(input.data.studentId).first<{ id: string; level: string; classroom: string; identity_number_hash: string | null }>();
     if (!studentAccess) return jsonError("ไม่พบข้อมูลนักเรียน", 404);
+    if (studentAccess.identity_number_hash && (!input.data.identityNumber || !await verifyStudentIdentity(input.data.identityNumber, studentAccess.identity_number_hash))) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return jsonError("เลขประจำตัวบุคคลไม่ตรงกับข้อมูลนักเรียน", 401);
+    }
+    if (!studentAccess.identity_number_hash && !input.data.trackingPassword) return jsonError("กรุณาตั้งรหัสติดตาม 6 หลักสำหรับเรื่องนี้");
+    const category = await db.prepare("SELECT id FROM case_categories WHERE id=? AND is_active=1").bind(input.data.categoryId).first();
+    if (!category) return jsonError("ไม่พบประเภทเรื่องที่เลือก กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง", 409);
     const duplicate = await db.prepare(
       "SELECT resource_id FROM audit_logs WHERE action='CREATE_CASE' AND metadata=? LIMIT 1",
     ).bind(input.data.idempotencyKey).first<{ resource_id: string }>();
@@ -67,6 +76,7 @@ export async function POST(request: Request) {
     const caseNumber = `RB-${year}-${String(sequence.last_value).padStart(6, "0")}`;
     const id = createId("case");
     const uploadToken = createOpaqueToken();
+    const legacyTrackingHash = studentAccess.identity_number_hash ? null : await hashTrackingPassword(input.data.trackingPassword!);
     const immediate = input.data.safetyLevel === "UNSAFE" ? 1 : 0;
     const exclusiveReviewer = await findExclusiveReviewerForRoom(db, studentAccess.level, studentAccess.classroom);
     const statements: D1PreparedStatement[] = [
@@ -80,7 +90,7 @@ export async function POST(request: Request) {
         id, caseNumber, input.data.studentId, input.data.categoryId, input.data.title,
         input.data.description, input.data.location, input.data.peopleInvolved,
         input.data.requestedHelp, input.data.safetyLevel, input.data.isAnonymous ? 1 : 0,
-        immediate, immediate ? "MODERATE" : "WATCH", "NEW", exclusiveReviewer, await hashPassword(input.data.trackingPassword),
+        immediate, immediate ? "MODERATE" : "WATCH", "NEW", exclusiveReviewer, legacyTrackingHash,
         await hashOpaqueToken(uploadToken),
       ),
       db.prepare(
@@ -108,29 +118,6 @@ export async function GET(request: Request) {
   try {
     const db = await ensureDatabase();
     const url = new URL(request.url);
-    const studentCode = url.searchParams.get("studentCode");
-    const trackingPassword = url.searchParams.get("trackingPassword");
-    if (studentCode || trackingPassword) {
-      if (!studentCode || !/^\d{6}$/.test(trackingPassword ?? "")) return jsonError("เลขประจำตัวนักเรียนหรือรหัสติดตามไม่ถูกต้อง", 401);
-      const { results: candidates } = await db.prepare(
-        `SELECT c.case_number,c.status,c.created_at,c.tracking_password_hash,cc.name category_name
-         FROM cases c JOIN students s ON s.id=c.student_id
-         JOIN case_categories cc ON cc.id=c.category_id
-         WHERE s.student_code=? ORDER BY c.created_at DESC LIMIT 20`,
-      ).bind(studentCode).all();
-      const cases = [];
-      for (const candidate of candidates as Array<Record<string, unknown>>) {
-        if (typeof candidate.tracking_password_hash === "string" && await verifyPassword(trackingPassword!, candidate.tracking_password_hash)) {
-          cases.push({ case_number: candidate.case_number, status: candidate.status, created_at: candidate.created_at, category_name: candidate.category_name });
-        }
-      }
-      if (cases.length === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        return jsonError("เลขประจำตัวนักเรียนหรือรหัสติดตามไม่ถูกต้อง", 401);
-      }
-      return Response.json({ cases });
-    }
-
     const session = await requireCaseSession(request);
     const status = url.searchParams.get("status");
     const severity = url.searchParams.get("severity");

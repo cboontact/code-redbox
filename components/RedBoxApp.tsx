@@ -49,6 +49,7 @@ import type { CaseRecord, CaseStatus, Student } from "../lib/types";
 import { SeverityBadge, StatusBadge } from "./CaseBadge";
 import { EvidencePreview } from "./EvidencePreview";
 import { WorkflowTransitionModal } from "./WorkflowTransitionModal";
+import { isValidStudentIdentity, normalizeStudentIdentity, studentIdentityError } from "../lib/student-identity";
 
 type AppView = "home" | "report" | "track" | "admin";
 type Category = { id: string; name: string; icon: string; color: string };
@@ -443,7 +444,9 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
   const [step, setStep] = useState(1);
   const formTopRef = useRef<HTMLElement | null>(null);
   const hasChangedStep = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
   const [studentCode, setStudentCode] = useState("");
+  const [identityNumber, setIdentityNumber] = useState("");
   const [trackingPassword, setTrackingPassword] = useState("");
   const [trackingPasswordConfirm, setTrackingPasswordConfirm] = useState("");
   const [student, setStudent] = useState<Student | null>(null);
@@ -514,8 +517,9 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
     if (step === 1)
       return (
         Boolean(student) &&
-        /^\d{6}$/.test(trackingPassword) &&
-        trackingPassword === trackingPasswordConfirm
+        (student?.has_identity_number
+          ? isValidStudentIdentity(identityNumber)
+          : /^\d{6}$/.test(trackingPassword) && trackingPassword === trackingPasswordConfirm)
       );
     if (step === 2) return Boolean(form.categoryId);
     if (step === 3)
@@ -530,14 +534,16 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
     setLoading(true);
     setError("");
     try {
+      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
       const response = await fetch("/api/cases", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...form,
           studentId: student.id,
-          trackingPassword,
-          idempotencyKey: crypto.randomUUID(),
+          identityNumber: student.has_identity_number ? normalizeStudentIdentity(identityNumber) : undefined,
+          trackingPassword: student.has_identity_number ? undefined : trackingPassword,
+          idempotencyKey: idempotencyKeyRef.current,
         }),
       });
       const data = await readJson<{
@@ -656,6 +662,7 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
                     onChange={(e) => {
                       setStudentCode(e.target.value.replace(/\D/g, ""));
                       setStudent(null);
+                      setIdentityNumber("");
                       setTrackingPassword("");
                       setTrackingPasswordConfirm("");
                     }}
@@ -706,56 +713,35 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
                       icon={faCheckCircle}
                     />
                   </div>
-                  <div className="tracking-password-box">
+                  {student.has_identity_number ? <div className="tracking-password-box">
                     <div>
                       <FontAwesomeIcon icon={faShieldHalved} />
                       <span>
-                        <b>ตั้งรหัสสำหรับเรื่องนี้</b>
+                        <b>ยืนยันว่าเป็นข้อมูลของนักเรียน</b>
                         <small>
-                          ทุกเรื่องใช้รหัส 6 หลักแยกกัน
-                          ตั้งรหัสใหม่ได้ทุกครั้งที่ส่ง
+                          ใช้เลขประจำตัวบุคคลเดิมทุกครั้ง ไม่ต้องตั้งรหัสติดตามใหม่
                         </small>
                       </span>
                     </div>
                     <label>
-                      <span>รหัสติดตาม 6 หลัก</span>
+                      <span>เลขประจำตัวบุคคล / รหัส G</span>
                       <input
                         type="password"
-                        inputMode="numeric"
-                        autoComplete="new-password"
-                        value={trackingPassword}
-                        onChange={(e) =>
-                          setTrackingPassword(
-                            e.target.value.replace(/\D/g, "").slice(0, 6),
-                          )
-                        }
-                        maxLength={6}
-                        placeholder="••••••"
+                        autoComplete="off"
+                        value={identityNumber}
+                        onChange={(e) => setIdentityNumber(e.target.value.toUpperCase().replace(/[^0-9G๐-๙\s-]/g, "").slice(0, 17))}
+                        maxLength={17}
+                        placeholder="เลข 13 หลัก หรือ G ตามด้วย 12 หลัก"
                       />
                     </label>
-                    <label>
-                      <span>ยืนยันรหัสอีกครั้ง</span>
-                      <input
-                        type="password"
-                        inputMode="numeric"
-                        autoComplete="new-password"
-                        value={trackingPasswordConfirm}
-                        onChange={(e) =>
-                          setTrackingPasswordConfirm(
-                            e.target.value.replace(/\D/g, "").slice(0, 6),
-                          )
-                        }
-                        maxLength={6}
-                        placeholder="••••••"
-                      />
-                    </label>
-                    {trackingPasswordConfirm &&
-                      trackingPassword !== trackingPasswordConfirm && (
-                        <small className="password-mismatch">
-                          รหัสทั้งสองช่องยังไม่ตรงกัน
-                        </small>
-                      )}
-                  </div>
+                    {identityNumber && !isValidStudentIdentity(identityNumber) && <small className="password-mismatch">{studentIdentityError(identityNumber)}</small>}
+                    <small className="field-help">รองรับเลขประจำตัวบุคคลไทย 13 หลัก รวมผู้ถือบัตรที่ขึ้นต้น 0 หรือ 8 และ G Code ของกระทรวงศึกษาธิการ</small>
+                  </div> : <div className="tracking-password-box">
+                    <div><FontAwesomeIcon icon={faShieldHalved} /><span><b>ตั้งรหัสติดตามชั่วคราว</b><small>ข้อมูลเลขประจำตัวบุคคลยังไม่ได้นำเข้า จึงใช้รหัส 6 หลักสำหรับเรื่องนี้ไปก่อน</small></span></div>
+                    <label><span>รหัสติดตาม 6 หลัก</span><input type="password" inputMode="numeric" value={trackingPassword} onChange={(e) => setTrackingPassword(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} placeholder="••••••" /></label>
+                    <label><span>ยืนยันรหัสอีกครั้ง</span><input type="password" inputMode="numeric" value={trackingPasswordConfirm} onChange={(e) => setTrackingPasswordConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} placeholder="••••••" /></label>
+                    {trackingPasswordConfirm && trackingPassword !== trackingPasswordConfirm && <small className="password-mismatch">รหัสทั้งสองช่องยังไม่ตรงกัน</small>}
+                  </div>}
                 </>
               )}
               <p className="helper">
@@ -1184,7 +1170,7 @@ function Review({ label, value }: { label: string; value: string }) {
 
 function Tracking({ notify }: { notify: (message: string) => void }) {
   const [studentCode, setStudentCode] = useState("");
-  const [trackingPassword, setTrackingPassword] = useState("");
+  const [credential, setCredential] = useState("");
   const [items, setItems] = useState<Array<Record<string, string>>>([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1196,9 +1182,11 @@ function Tracking({ notify }: { notify: (message: string) => void }) {
     setItems([]);
     setSearched(false);
     try {
-      const response = await fetch(
-        `/api/cases?studentCode=${encodeURIComponent(studentCode)}&trackingPassword=${encodeURIComponent(trackingPassword)}`,
-      );
+      const response = await fetch("/api/cases/track", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ studentCode, credential: normalizeStudentIdentity(credential) }),
+      });
       const data = await readJson<{
         cases: Array<Record<string, string>>;
         error?: string;
@@ -1228,7 +1216,7 @@ function Tracking({ notify }: { notify: (message: string) => void }) {
           <span className="eyebrow">ติดตามความคืบหน้า</span>
           <h1>ตรวจสอบสถานะเรื่อง</h1>
           <p>
-            ใช้เลขประจำตัวนักเรียนและรหัสติดตาม 6 หลักที่ตั้งไว้ตอนส่งเรื่อง
+            ใช้เลขประจำตัวนักเรียนคู่กับเลขประจำตัวบุคคล หรือรหัสติดตามเดิมระหว่างรอนำเข้าข้อมูลทะเบียน
           </p>
         </div>
         <div className="tracking-card">
@@ -1247,28 +1235,26 @@ function Tracking({ notify }: { notify: (message: string) => void }) {
               />
             </label>
             <label>
-              <span>รหัสติดตาม 6 หลัก</span>
+              <span>เลขประจำตัวบุคคล / รหัส G / รหัสติดตามเดิม</span>
               <input
                 type="password"
-                value={trackingPassword}
-                inputMode="numeric"
-                autoComplete="current-password"
+                value={credential}
+                autoComplete="off"
                 onChange={(e) => {
-                  setTrackingPassword(
-                    e.target.value.replace(/\D/g, "").slice(0, 6),
-                  );
+                  setCredential(e.target.value.toUpperCase().replace(/[^0-9G๐-๙\s-]/g, "").slice(0, 17));
                   setSearched(false);
                 }}
-                placeholder="••••••"
-                maxLength={6}
+                placeholder="เลข 13 หลัก หรือ G ตามด้วย 12 หลัก"
+                maxLength={17}
               />
+              {credential && !isValidStudentIdentity(credential) && !/^\d{6}$/.test(credential) && <small className="password-mismatch">กรอกเลขประจำตัวบุคคล, G Code หรือรหัสเดิม 6 หลัก</small>}
             </label>
             <button
               className="button primary"
               disabled={
                 loading ||
                 studentCode.length < 4 ||
-                trackingPassword.length !== 6
+                (!isValidStudentIdentity(credential) && !/^\d{6}$/.test(credential))
               }
             >
               {loading ? (
@@ -1528,10 +1514,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [currentDisplayName, setCurrentDisplayName] = useState("");
   const [transitionTarget, setTransitionTarget] = useState("");
   const [reassignmentOpen, setReassignmentOpen] = useState(false);
-  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
   const [deleteCaseOpen, setDeleteCaseOpen] = useState(false);
-  const [resetPassword, setResetPassword] = useState("");
-  const [resetPasswordConfirm, setResetPasswordConfirm] = useState("");
   const [pendingAssignee, setPendingAssignee] = useState("");
   const [pendingAssigneeName, setPendingAssigneeName] = useState("");
   const [pendingTeam, setPendingTeam] = useState<string[]>([]);
@@ -1618,14 +1601,14 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   useEffect(() => {
     if (!selected) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      const childModalOpen = Boolean(previewFile || transitionTarget || reassignmentOpen || resetPasswordOpen || deleteCaseOpen);
+      const childModalOpen = Boolean(previewFile || transitionTarget || reassignmentOpen || deleteCaseOpen);
       if (event.key === "Escape" && !childModalOpen && !saving) setSelected(null);
     };
     document.addEventListener("keydown", closeOnEscape);
     return () => {
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [selected, previewFile, transitionTarget, reassignmentOpen, resetPasswordOpen, deleteCaseOpen, saving]);
+  }, [selected, previewFile, transitionTarget, reassignmentOpen, deleteCaseOpen, saving]);
   async function openCase(caseNumber: string) {
     try {
       const response = await fetch(`/api/cases/${caseNumber}`);
@@ -2530,23 +2513,6 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                       <p>คำสั่งพิเศษสำหรับดูแลเคส ไม่เกี่ยวกับขั้นตอนดำเนินงาน</p>
                     </div>
                   </header>
-                  <div className="admin-tool-row">
-                    <div>
-                      <b>รีเซ็ตรหัสติดตาม</b>
-                      <small>ใช้เมื่อนักเรียนลืมรหัสติดตาม 6 หลัก</small>
-                    </div>
-                    <button
-                      type="button"
-                      className="button secondary compact"
-                      onClick={() => {
-                        setResetPassword("");
-                        setResetPasswordConfirm("");
-                        setResetPasswordOpen(true);
-                      }}
-                    >
-                      รีเซ็ตรหัส
-                    </button>
-                  </div>
                   <div className="admin-tool-row danger-zone">
                     <div>
                       <b>ลบเคสออกจากระบบ</b>
@@ -2562,104 +2528,6 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   </div>
                 </section>
               )}
-            </div>
-          </section>
-        </div>
-      )}
-      {selected && resetPasswordOpen && (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !saving)
-              setResetPasswordOpen(false);
-          }}
-        >
-          <section
-            className="tracking-reset-modal"
-            role="dialog"
-            aria-modal="true"
-          >
-            <header>
-              <div>
-                <span className="eyebrow">
-                  <FontAwesomeIcon icon={faShieldHalved} /> ความปลอดภัย
-                </span>
-                <h2>รีเซ็ตรหัสติดตาม</h2>
-                <p>{selected.case.case_number}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setResetPasswordOpen(false)}
-                disabled={saving}
-                aria-label="ปิด"
-              >
-                <FontAwesomeIcon icon={faXmark} />
-              </button>
-            </header>
-            <div className="tracking-reset-body">
-              <p>ตั้งรหัสใหม่ 6 หลัก รหัสเดิมจะใช้งานไม่ได้ทันที</p>
-              <label>
-                <span>รหัสใหม่</span>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  value={resetPassword}
-                  onChange={(e) =>
-                    setResetPassword(
-                      e.target.value.replace(/\D/g, "").slice(0, 6),
-                    )
-                  }
-                  maxLength={6}
-                  autoFocus
-                  placeholder="••••••"
-                />
-              </label>
-              <label>
-                <span>ยืนยันรหัสใหม่</span>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  value={resetPasswordConfirm}
-                  onChange={(e) =>
-                    setResetPasswordConfirm(
-                      e.target.value.replace(/\D/g, "").slice(0, 6),
-                    )
-                  }
-                  maxLength={6}
-                  placeholder="••••••"
-                />
-              </label>
-              {resetPasswordConfirm &&
-                resetPassword !== resetPasswordConfirm && (
-                  <small className="password-mismatch">
-                    รหัสทั้งสองช่องยังไม่ตรงกัน
-                  </small>
-                )}
-              <footer>
-                <button
-                  type="button"
-                  className="button secondary"
-                  onClick={() => setResetPasswordOpen(false)}
-                  disabled={saving}
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  className="button primary"
-                  disabled={
-                    saving ||
-                    resetPassword.length !== 6 ||
-                    resetPassword !== resetPasswordConfirm
-                  }
-                  onClick={async () => {
-                    await updateCase({ resetTrackingPassword: resetPassword });
-                    setResetPasswordOpen(false);
-                  }}
-                >
-                  บันทึกรหัสใหม่
-                </button>
-              </footer>
             </div>
           </section>
         </div>
