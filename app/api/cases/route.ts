@@ -165,7 +165,9 @@ export async function GET(request: Request) {
       `SELECT ${SAFE_CASE_COLUMNS},cc.name category_name,
        CASE WHEN c.is_anonymous=1 AND ${revealAnonymous ? "0" : "1"}=1 THEN 'ปกปิดตัวตน'
        ELSE s.prefix||s.first_name||' '||s.last_name END reporter_name,
-       s.student_code,s.level,s.classroom
+       s.student_code,s.level,s.classroom,
+       (SELECT h.due_date FROM case_handoffs h WHERE h.case_id=c.id AND h.due_date IS NOT NULL
+        ORDER BY h.created_at DESC LIMIT 1) due_date
        FROM cases c JOIN case_categories cc ON cc.id=c.category_id
        JOIN students s ON s.id=c.student_id
        WHERE ${clauses.join(" AND ")} ORDER BY ${STAFF_CASE_ORDER} LIMIT 100`,

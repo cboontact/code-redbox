@@ -40,6 +40,7 @@ export interface CaseRecord {
   requires_immediate_review: number;
   assigned_to: string | null;
   exclusive_reviewer_username?: string | null;
+  due_date?: string | null;
   created_at: string;
   reporter_name?: string;
   student_code?: string;

@@ -514,3 +514,22 @@ label>span, .form-grid label>span, .login-form label>span, .tracking-password-bo
 .case-group-row.active td { border-left:4px solid #6a4df4; }
 .case-group-row.review td { border-left:4px solid #e8730c; }
 .case-group-row.closed td { border-left:4px solid #0c9a66; }
+
+/* ---------- "Waiting for you" highlights ---------- */
+.pulse-dot { position:relative; flex:none; display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--rb-red); }
+.pulse-dot::after { content:""; position:absolute; inset:0; border-radius:50%; background:var(--rb-red); animation:rb-pulse 1.8s ease-out infinite; }
+@keyframes rb-pulse { 0% { transform:scale(1); opacity:.55; } 70%,100% { transform:scale(2.6); opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .pulse-dot::after { animation:none; } }
+.case-group-row.waiting td { border-left:4px solid var(--rb-red); background:var(--rb-red-soft); }
+.case-group-row.waiting td span { color:var(--rb-red-deep); }
+.case-group-row td .pulse-dot { margin-right:10px; vertical-align:middle; }
+.case-table tr.needs-action td:first-child { box-shadow:inset 4px 0 0 var(--rb-red); }
+.waiting-label { display:flex; align-items:center; gap:8px; width:max-content; max-width:100%; margin-top:6px; padding:3px 10px 3px 8px; border-radius:999px; background:var(--rb-red-soft); color:var(--rb-red-deep); font-size:12px; font-weight:700; line-height:1.4; }
+.waiting-label.due { background:#fff6d1; color:#7a5800; }
+.waiting-label.due svg { font-size:11px; }
+.stat-card { position:relative; }
+.stat-alert { position:absolute; top:10px; right:10px; }
+@media (max-width:600px) {
+  .dashboard-content .dashboard-heading .button { flex:none; width:46px; min-width:46px; padding:0; font-size:0; overflow:hidden; }
+  .dashboard-content .dashboard-heading .button svg { font-size:16px; }
+}

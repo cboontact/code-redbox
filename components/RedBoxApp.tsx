@@ -179,6 +179,29 @@ const severityLabels: Record<string, string> = {
   CRITICAL: "วิกฤต",
 };
 
+// What, if anything, this account has to do next on a case. Mirrors the
+// transitions the API allows, so a highlighted case is always one the viewer can act on.
+function actionNeeded(item: Pick<CaseRecord, "status" | "assigned_to">, roles: string[], username: string) {
+  const has = (role: string) => roles.includes("SUPER_ADMIN") || roles.includes(role);
+  const status = item.status;
+  const mine = Boolean(username) && item.assigned_to === username;
+  if (["NEW", "REOPENED"].includes(status) && has("INTAKE")) return "เรื่องใหม่ รอคัดกรอง";
+  if (status === "SCREENING" && has("INTAKE")) return "รอมอบหมายผู้รับผิดชอบ";
+  if (status === "AFFAIRS_REVIEW" && has("STUDENT_AFFAIRS")) return "รอเลือกทีมผู้ดำเนินการ";
+  if (["INTAKE_REVIEW", "ADMIN_REVIEW", "PENDING_CLOSE", "RESOLVED"].includes(status) && has("INTAKE")) return "ทีมส่งผลแล้ว รอตรวจและปิดเคส";
+  if (["ASSIGNED", "DIRECTOR_ORDERED"].includes(status) && mine) return "ได้รับมอบหมาย รอเริ่มดำเนินการ";
+  if (status === "IN_PROGRESS" && mine) return "กำลังดำเนินการ รอส่งผล";
+  return null;
+}
+
+function todayInBangkok() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+}
+
+function isFollowUpDue(item: Pick<CaseRecord, "status" | "due_date">) {
+  return Boolean(item.due_date) && !["CLOSED", "RESOLVED"].includes(item.status) && String(item.due_date) <= todayInBangkok();
+}
+
 function availableStatusEntries(
   current: string,
   assignedRoles: string | string[],
@@ -1950,9 +1973,17 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   );
   // The table is grouped by the same five buckets as the counters above it,
   // so a group heading and its counter always describe the same cases.
-  const groupedVisibleCases = dashboardBuckets
-    .map((group) => ({ ...group, cases: visibleCases.filter((item) => matchesDashboardStatus(group.key, item.status)) }))
-    .filter((group) => group.cases.length > 0);
+  const rolesForActions = currentRoles.length ? currentRoles : currentRole ? [currentRole] : [];
+  const waitingFor = (item: CaseRecord) => actionNeeded(item, rolesForActions, currentUsername);
+  const needsAttention = (item: CaseRecord) => Boolean(waitingFor(item)) || isFollowUpDue(item);
+  const waitingCases = visibleCases.filter(needsAttention);
+  const waitingTotal = cases.filter(needsAttention).length;
+  const bucketHasWaiting = (key: DashboardStatusFilter) => cases.some((item) => matchesDashboardStatus(key, item.status) && needsAttention(item));
+  // Work waiting for this account is pinned to the top; everything else keeps the counters' order.
+  const groupedVisibleCases = [
+    { key: "waiting", label: "รอคุณดำเนินการ", cases: waitingCases },
+    ...dashboardBuckets.map((group) => ({ ...group, cases: visibleCases.filter((item) => matchesDashboardStatus(group.key, item.status) && !needsAttention(item)) })),
+  ].filter((group) => group.cases.length > 0);
   return (
     <div className="admin-layout">
       <aside className="sidebar">
@@ -2055,7 +2086,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
             <div>
               <span className="eyebrow">ศูนย์ดูแลนักเรียน</span>
               <h1>สวัสดีครับ {currentDisplayName || currentUsername || "บุคลากร"}</h1>
-              <p>ภาพรวมเคสและเรื่องที่ต้องให้ความสำคัญวันนี้</p>
+              <p>{waitingTotal > 0 ? `มี ${waitingTotal} เคสรอคุณดำเนินการ` : "ไม่มีเคสที่รอคุณดำเนินการในตอนนี้"}</p>
             </div>
             <button className="button secondary" onClick={() => loadCases()}>
               <FontAwesomeIcon icon={faRotate} /> รีเฟรช
@@ -2075,6 +2106,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               value={counts.new}
               tone="cyan"
               active={quickFilter === "new"}
+              alert={bucketHasWaiting("new")}
             />
             <Stat
               icon={faClock}
@@ -2082,6 +2114,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               value={counts.pending}
               tone="amber"
               active={quickFilter === "pending"}
+              alert={bucketHasWaiting("pending")}
             />
             <Stat
               icon={faShieldHalved}
@@ -2089,6 +2122,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               value={counts.active}
               tone="orange"
               active={quickFilter === "active"}
+              alert={bucketHasWaiting("active")}
             />
             <Stat
               icon={faMagnifyingGlass}
@@ -2096,6 +2130,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               value={counts.review}
               tone="purple"
               active={quickFilter === "review"}
+              alert={bucketHasWaiting("review")}
             />
             <Stat
               icon={faCheckCircle}
@@ -2103,6 +2138,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               value={counts.closed}
               tone="green"
               active={quickFilter === "closed"}
+              alert={bucketHasWaiting("closed")}
             />
           </div>
           <section className="case-panel">
@@ -2199,19 +2235,23 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   {groupedVisibleCases.map((group) => (
                     <tbody key={group.key}>
                       <tr className={`case-group-row ${group.key}`}>
-                        <td colSpan={7}><span>{group.label}</span><small>{group.cases.length} เคส</small></td>
+                        <td colSpan={7}>{group.key === "waiting" && <i className="pulse-dot" aria-hidden="true" />}<span>{group.label}</span><small>{group.cases.length} เคส</small></td>
                       </tr>
                       {group.cases.map((item) => (
                       <tr
                         key={item.id}
-                        className={
-                          item.requires_immediate_review ? "immediate" : ""
-                        }
+                        className={`${item.requires_immediate_review ? "immediate" : ""}${needsAttention(item) ? " needs-action" : ""}`}
                         onClick={() => openCase(item.case_number)}
                       >
                         <td className="case-id-cell">
                           <b>{item.case_number}</b>
                           <span className="case-list-title" title={item.title}>{item.title}</span>
+                          {waitingFor(item) ? (
+                            <small className="waiting-label"><i className="pulse-dot" aria-hidden="true" />{waitingFor(item)}</small>
+                          ) : null}
+                          {isFollowUpDue(item) ? (
+                            <small className="waiting-label due"><FontAwesomeIcon icon={faClock} /> ถึงกำหนดติดตาม {String(item.due_date)}</small>
+                          ) : null}
                           {item.requires_immediate_review ? (
                             <small className="urgent-label">
                               <FontAwesomeIcon icon={faTriangleExclamation} />{" "}
@@ -2909,12 +2949,14 @@ function Stat({
   value,
   tone,
   active,
+  alert = false,
 }: {
   icon: typeof faFolderOpen;
   label: string;
   value: number;
   tone: string;
   active: boolean;
+  alert?: boolean;
 }) {
   return (
     <button
@@ -2934,6 +2976,7 @@ function Stat({
         <small>{label}</small>
         <strong>{value}</strong>
       </div>
+      {alert && <i className="pulse-dot stat-alert" role="img" aria-label="มีเคสรอคุณดำเนินการ" />}
       <FontAwesomeIcon className="stat-arrow" icon={faChevronRight} />
     </button>
   );
