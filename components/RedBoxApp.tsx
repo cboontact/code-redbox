@@ -80,11 +80,11 @@ type Attachment = {
   file_size: number;
 };
 type Detail = {
-  case: CaseRecord & Record<string, unknown> & { advisor_names?: string[] };
+  case: CaseRecord & Record<string, unknown> & { advisor_names?: string[]; advisor_contacts?: Array<{ name: string; phone: string | null }> };
   timeline: Timeline[];
   notes: Note[];
   attachments: Attachment[];
-  assignments: Array<{ id: string; username: string; display_name: string; assignment_role: "LEAD" | "MEMBER"; status: string; role_values?: string }>;
+  assignments: Array<{ id: string; username: string; display_name: string; assignment_role: "LEAD" | "MEMBER"; status: string; role_values?: string; phone?: string | null }>;
 };
 type Timeline = {
   id: string;
@@ -162,6 +162,13 @@ const dashboardStatusFilters = {
   closed: ["RESOLVED", "CLOSED"],
 } as const satisfies Record<string, readonly CaseStatus[]>;
 type DashboardStatusFilter = keyof typeof dashboardStatusFilters;
+const dashboardBuckets: Array<{ key: DashboardStatusFilter; label: string }> = [
+  { key: "new", label: "รับเรื่องแล้ว" },
+  { key: "pending", label: "รอพิจารณา / มอบหมาย" },
+  { key: "active", label: "กำลังดำเนินการ" },
+  { key: "review", label: "รอตรวจผล / ปิด" },
+  { key: "closed", label: "เสร็จสิ้น" },
+];
 function matchesDashboardStatus(filter: DashboardStatusFilter, status: CaseStatus) {
   return (dashboardStatusFilters[filter] as readonly CaseStatus[]).includes(status);
 }
@@ -224,21 +231,22 @@ function CaseWorkflowProgress({ status }: { status: string }) {
   const steps = ["รับเรื่อง", "กิจการ/ฝ่ายบริหาร", "ครูดำเนินการ", "เจ้าหน้าที่ตรวจผล", "ปิดเคส"];
   const stageByStatus: Record<string, number> = {
     NEW: 0,
+    REOPENED: 0,
     AFFAIRS_REVIEW: 1,
     DEPUTY_REVIEW: 1,
+    DIRECTOR_REVIEW: 1,
     SCREENING: 1,
-    REOPENED: 1,
     ASSIGNED: 2,
     IN_PROGRESS: 2,
     INTAKE_REVIEW: 3,
     DIRECTOR_ORDERED: 2,
     ADMIN_REVIEW: 3,
-    DIRECTOR_REVIEW: 3,
     PENDING_CLOSE: 3,
     RESOLVED: 3,
     CLOSED: 4,
   };
-  const currentStage = stageByStatus[status] ?? 0;
+  // A closed case has finished every step, including the last one.
+  const currentStage = status === "CLOSED" ? steps.length : (stageByStatus[status] ?? 0);
   return (
     <div className="case-workflow-progress" aria-label="ลำดับการดำเนินงานของเคส">
       {steps.map((label, index) => (
@@ -1345,6 +1353,29 @@ function LocalEvidenceFile({
   );
 }
 
+// Thai has no spaces inside a phrase, so browsers may break a label mid-word.
+// Each space-separated phrase stays whole and the label wraps only between them.
+function Phrases({ text }: { text: string }) {
+  return (
+    <span className="phrases">
+      {text.split(" ").map((part) => (
+        <span key={part}>{part}</span>
+      ))}
+    </span>
+  );
+}
+
+function CallLink({ phone }: { phone?: string | null }) {
+  const digits = (phone ?? "").replace(/[^0-9+]/g, "");
+  if (!digits) return <small className="call-missing">ไม่มีเบอร์ในระบบ</small>;
+  return (
+    <a className="call-link" href={`tel:${digits}`} aria-label={`โทร ${phone}`}>
+      <FontAwesomeIcon icon={faPhone} />
+      {phone}
+    </a>
+  );
+}
+
 const reviewIcons = {
   ผู้แจ้ง: faUserShield,
   ประเภท: faFolderOpen,
@@ -1695,6 +1726,7 @@ function TeamAssigneePicker({
 
 function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [cases, setCases] = useState<CaseRecord[]>([]);
+  const [statusCounts, setStatusCounts] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -1720,8 +1752,8 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const [pendingAssigneeName, setPendingAssigneeName] = useState("");
   const [pendingTeam, setPendingTeam] = useState<string[]>([]);
   const [leadAssignee, setLeadAssignee] = useState("");
-  async function loadCases() {
-    setLoading(true);
+  async function loadCases(silent = false) {
+    if (!silent) setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
@@ -1734,11 +1766,12 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
         return;
       }
       if (response.status === 428) return;
-      const data = await readJson<{ cases: CaseRecord[]; error?: string }>(
+      const data = await readJson<{ cases: CaseRecord[]; statusCounts?: Record<string, number>; error?: string }>(
         response,
       );
       if (!response.ok) throw new Error(data.error);
       setCases(data.cases ?? []);
+      setStatusCounts(data.statusCounts ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "ไม่สามารถโหลดข้อมูลได้");
     } finally {
@@ -1747,8 +1780,18 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   }
   /* eslint-disable react-hooks/exhaustive-deps -- Search state intentionally controls the debounced reload. */
   useEffect(() => {
-    const timer = window.setTimeout(loadCases, 280);
+    const timer = window.setTimeout(() => loadCases(), 280);
     return () => window.clearTimeout(timer);
+  }, [search, status, severity]);
+  // Other people move cases forward too; refresh quietly when this tab is looked at again.
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === "visible") loadCases(true); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [search, status, severity]);
   /* eslint-enable react-hooks/exhaustive-deps */
   useEffect(() => {
@@ -1872,18 +1915,22 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
       setSaving(false);
     }
   }
-  const counts = useMemo(
-    () => ({
-      all: cases.length,
-      new: cases.filter((c) => matchesDashboardStatus("new", c.status)).length,
-      pending: cases.filter((c) => matchesDashboardStatus("pending", c.status)).length,
-      active: cases.filter((c) => matchesDashboardStatus("active", c.status)).length,
-      review: cases.filter((c) => matchesDashboardStatus("review", c.status)).length,
+  const counts = useMemo(() => {
+    // Prefer the server's totals: they ignore the search box and the 100-row page.
+    const bucket = (key: DashboardStatusFilter) =>
+      statusCounts
+        ? (dashboardStatusFilters[key] as readonly string[]).reduce((sum, value) => sum + (statusCounts[value] ?? 0), 0)
+        : cases.filter((c) => matchesDashboardStatus(key, c.status)).length;
+    return {
+      all: statusCounts ? Object.values(statusCounts).reduce((sum, value) => sum + value, 0) : cases.length,
+      new: bucket("new"),
+      pending: bucket("pending"),
+      active: bucket("active"),
+      review: bucket("review"),
       immediate: cases.filter((c) => c.requires_immediate_review).length,
-      closed: cases.filter((c) => matchesDashboardStatus("closed", c.status)).length,
-    }),
-    [cases],
-  );
+      closed: bucket("closed"),
+    };
+  }, [cases, statusCounts]);
   const visibleCases =
     quickFilter === "all"
       ? cases
@@ -1901,8 +1948,10 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
     selectedStatus === "SCREENING" &&
     (hasRole("SUPER_ADMIN") || hasRole("INTAKE")),
   );
-  const groupedVisibleCases = statusGroups
-    .map((group) => ({ ...group, cases: visibleCases.filter((item) => group.statuses.includes(item.status)) }))
+  // The table is grouped by the same five buckets as the counters above it,
+  // so a group heading and its counter always describe the same cases.
+  const groupedVisibleCases = dashboardBuckets
+    .map((group) => ({ ...group, cases: visibleCases.filter((item) => matchesDashboardStatus(group.key, item.status)) }))
     .filter((group) => group.cases.length > 0);
   return (
     <div className="admin-layout">
@@ -2008,7 +2057,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               <h1>สวัสดีครับ {currentDisplayName || currentUsername || "บุคลากร"}</h1>
               <p>ภาพรวมเคสและเรื่องที่ต้องให้ความสำคัญวันนี้</p>
             </div>
-            <button className="button secondary" onClick={loadCases}>
+            <button className="button secondary" onClick={() => loadCases()}>
               <FontAwesomeIcon icon={faRotate} /> รีเฟรช
             </button>
           </div>
@@ -2123,7 +2172,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 <FontAwesomeIcon icon={faCircleInfo} />
                 <h3>ไม่สามารถโหลดข้อมูลได้</h3>
                 <p>{error}</p>
-                <button className="button secondary" onClick={loadCases}>
+                <button className="button secondary" onClick={() => loadCases()}>
                   ลองอีกครั้ง
                 </button>
               </div>
@@ -2235,7 +2284,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   }
                 >
                   <StatusBadge value={String(selected.case.status)} />
-                  <small>ดูขั้นตอนต่อไป</small>
+                  <small>ไปที่ขั้นตอนถัดไป</small>
                 </button>
               </div>
               {["NEW", "REOPENED"].includes(String(selected.case.status)) && selected.case.exclusive_reviewer_username === currentUsername && (
@@ -2247,7 +2296,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               </h3>
               <p className="case-description">{selected.case.description}</p>
               </section>
-              <div className="detail-grid">
+              <div className="detail-grid case-facts">
                 <Review
                   label="ประเภท"
                   value={String(selected.case.category_name)}
@@ -2267,35 +2316,50 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   value={String(selected.case.reporter_name ?? `${selected.case.prefix ?? ""}${selected.case.first_name ?? ""} ${selected.case.last_name ?? ""}`.trim())}
                 />
                 <Review
-                  label="ผู้รับผิดชอบ"
-                    value={String(
-                      selected.case.assigned_name ??
-                        selected.case.assigned_to ??
-                        "ยังไม่ได้มอบหมาย",
-                    )}
-                />
-                <Review
                   label="ชั้น / ห้อง"
                   value={`${String(selected.case.level ?? "-")}/${String(selected.case.classroom ?? "-")}`}
                 />
-                <Review
-                  label="ครูที่ปรึกษา"
-                  value={
-                    selected.case.advisor_names?.length
-                      ? selected.case.advisor_names.join(" / ")
-                      : "ยังไม่ได้กำหนดครูที่ปรึกษา"
-                  }
-                />
               </div>
               <div className="case-support-grid">
-              {selected.assignments?.length > 0 && (
-                <div className="note-card case-team-card">
-                  <h4 className="section-title"><FontAwesomeIcon icon={faPeopleGroup} /> ทีมผู้ดำเนินการ</h4>
-                  <div className="case-team-list">{selected.assignments.map((assignment) => (
-                    <div key={assignment.id}><span><b>{assignment.display_name}</b><small>@{assignment.username}</small></span><em>{assignment.assignment_role === "LEAD" ? "ผู้รับผิดชอบหลัก" : "ผู้ร่วมดำเนินการ"}</em></div>
-                  ))}</div>
+                <div className="note-card case-contact-card">
+                  <h4 className="section-title"><FontAwesomeIcon icon={faUserGraduate} /> ครูที่ปรึกษา</h4>
+                  <div className="case-contact-list">
+                    {(selected.case.advisor_contacts ?? (selected.case.advisor_names ?? []).map((name) => ({ name, phone: null }))).length === 0 ? (
+                      <p className="muted-text">ยังไม่ได้กำหนดครูที่ปรึกษา</p>
+                    ) : (
+                      (selected.case.advisor_contacts ?? (selected.case.advisor_names ?? []).map((name) => ({ name, phone: null }))).map((advisor) => (
+                        <div className="case-contact" key={advisor.name}>
+                          <span><b>{advisor.name}</b></span>
+                          <CallLink phone={advisor.phone} />
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-              )}
+                <div className="note-card case-contact-card case-team-card">
+                  <h4 className="section-title"><FontAwesomeIcon icon={faPeopleGroup} /> ผู้รับผิดชอบเคส</h4>
+                  <div className="case-contact-list">
+                    {selected.assignments?.length > 0 ? (
+                      selected.assignments.map((assignment) => (
+                        <div className="case-contact" key={assignment.id}>
+                          <span>
+                            <b>{assignment.display_name}</b>
+                            <em className={assignment.assignment_role === "LEAD" ? "lead" : ""}>{assignment.assignment_role === "LEAD" ? "ผู้รับผิดชอบหลัก" : "ผู้ร่วมดำเนินการ"}</em>
+                          </span>
+                          <CallLink phone={assignment.phone} />
+                        </div>
+                      ))
+                    ) : selected.case.assigned_to ? (
+                      <div className="case-contact">
+                        <span><b>{String(selected.case.assigned_name ?? selected.case.assigned_to)}</b></span>
+                        <CallLink phone={selected.case.assigned_phone as string | null | undefined} />
+                      </div>
+                    ) : (
+                      <p className="muted-text">ยังไม่ได้มอบหมาย</p>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div className="note-card evidence-card">
                 <h4 className="section-title">
                   <FontAwesomeIcon icon={faFileArrowUp} />
@@ -2320,266 +2384,6 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     ))}
                   </div>
                 )}
-              </div>
-              </div>
-              <div className="action-card" id="case-workflow-actions">
-                <h4 className="section-title">
-                  <FontAwesomeIcon icon={faSliders} />
-                  จัดการเคส
-                </h4>
-                <CaseWorkflowProgress status={String(selected.case.status)} />
-                <div className="workflow-guidance">
-                  <FontAwesomeIcon icon={faShieldHalved} />
-                  <div>
-                    <b>
-                      ขั้นตอนปัจจุบัน: {statusLabels[String(selected.case.status)]}
-                    </b>
-                    <small>
-                      สรุปหรือเหตุผลที่กรอกตอนเปลี่ยนขั้นตอนจะแสดงในไทม์ไลน์
-                      เพื่อบอกผู้รับช่วงว่าเกิดอะไรขึ้น ส่วนบันทึกภายในใช้จดข้อมูลระหว่างทำงาน
-                    </small>
-                  </div>
-                </div>
-                {availableStatusEntries(
-                  String(selected.case.status),
-                  currentRoles,
-                  isCurrentAssignee || isTeamMember,
-                  isCurrentAssignee,
-                ).length > 1 ? (
-                  <div className="workflow-next-step">
-                    <FontAwesomeIcon icon={faArrowRight} />
-                    <span>
-                      <small>ขั้นตอนถัดไป</small>
-                      <b>
-                        {{
-                          NEW: "คัดกรองและมอบหมายผู้รับผิดชอบ",
-                          AFFAIRS_REVIEW: "ทีมกิจการพิจารณาและเลือกทีมครู",
-                          DEPUTY_REVIEW: "รองผู้อำนวยการพิจารณา",
-                          SCREENING: "เลือกผู้รับผิดชอบแล้วส่งต่อ",
-                          ASSIGNED: "เริ่มดำเนินการเคส",
-                          IN_PROGRESS: "ส่งผลการดำเนินงานให้แอดมินตรวจ",
-                          INTAKE_REVIEW: "เจ้าหน้าที่ตรวจผลและปิดเคส",
-                          ADMIN_REVIEW: "ตรวจผลแล้วปิดเคส หรือเสนอผู้อำนวยการ",
-                          DIRECTOR_ORDERED: "รับคำสั่งผู้อำนวยการและดำเนินการต่อ",
-                          PENDING_CLOSE: "ยืนยันปิดเคส",
-                          RESOLVED: "ยืนยันปิดเคส",
-                          CLOSED: "เปิดเคสอีกครั้ง",
-                          REOPENED: "คัดกรองใหม่และมอบหมายผู้รับผิดชอบ",
-                        }[String(selected.case.status)]}
-                      </b>
-                    </span>
-                  </div>
-                ) : (
-                  <div className="workflow-waiting">
-                    <FontAwesomeIcon icon={faClock} />
-                    <span>
-                      <small>ยังไม่มีรายการที่ต้องดำเนินการ</small>
-                      <b>
-                        {selected.case.status === "DIRECTOR_REVIEW"
-                          ? "รอคำสั่งจากผู้อำนวยการ"
-                          : selected.case.status === "CLOSED"
-                            ? "เคสนี้ปิดเรียบร้อยแล้ว"
-                            : "บัญชีนี้ไม่มีสิทธิ์ดำเนินการในขั้นตอนปัจจุบัน"}
-                      </b>
-                    </span>
-                  </div>
-                )}
-                <label>
-                  <span>
-                    <FontAwesomeIcon icon={faTriangleExclamation} />
-                    ระดับความสำคัญ
-                  </span>
-                  <select
-                    value={selected.case.severity}
-                    onChange={(e) => updateCase({ severity: e.target.value })}
-                    disabled={saving || !["NEW", "REOPENED"].includes(String(selected.case.status)) || !(hasRole("SUPER_ADMIN") || hasRole("INTAKE"))}
-                  >
-                    {Object.entries(severityLabels).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="field-help">{["NEW", "REOPENED"].includes(String(selected.case.status)) ? "เจ้าหน้าที่รับเรื่องกำหนดระดับก่อนส่งต่อ" : "ยืนยันแล้วและล็อกอัตโนมัติหลังส่งต่อเคส"}</small>
-                </label>
-                {["NEW", "REOPENED"].includes(String(selected.case.status)) && (hasRole("INTAKE") || hasRole("SUPER_ADMIN")) && (
-                  <div className="workflow-decision-actions intake-routing-actions">
-                    {!['SEVERE', 'CRITICAL'].includes(String(selected.case.severity)) && <button type="button" className="button primary" disabled={saving} onClick={() => setTransitionTarget("AFFAIRS_REVIEW")}><FontAwesomeIcon icon={faPeopleGroup} /> ส่งทีมกิจการนักเรียน</button>}
-                    <button type="button" className={['SEVERE', 'CRITICAL'].includes(String(selected.case.severity)) ? "button primary" : "button secondary"} disabled={saving} onClick={() => setTransitionTarget("DEPUTY_REVIEW")}><FontAwesomeIcon icon={faShieldHalved} /> ส่งรองผู้อำนวยการ</button>
-                    <button type="button" className="button secondary close-case-button" disabled={saving} onClick={() => setTransitionTarget("CLOSED")}><FontAwesomeIcon icon={faCheckCircle} /> พิจารณาแล้ว ปิดเคส</button>
-                  </div>
-                )}
-                {selected.case.status === "AFFAIRS_REVIEW" && (hasRole("STUDENT_AFFAIRS") || hasRole("SUPER_ADMIN")) && (
-                  <div className="affairs-review-panel">
-                    <h5><FontAwesomeIcon icon={faPeopleGroup} /> เลือกทีมผู้ดำเนินการ</h5>
-                    <TeamAssigneePicker selected={pendingTeam} lead={leadAssignee} disabled={saving} onChange={(team, lead) => { setPendingTeam(team); setLeadAssignee(lead); }} />
-                    <div className="workflow-decision-actions">
-                      <button type="button" className="button primary" disabled={saving || pendingTeam.length === 0 || !leadAssignee} onClick={() => setTransitionTarget("IN_PROGRESS")}><FontAwesomeIcon icon={faPaperPlane} /> อนุมัติและมอบหมาย</button>
-                      <button type="button" className="button secondary" disabled={saving} onClick={() => setTransitionTarget("INTAKE_REVIEW")}><FontAwesomeIcon icon={faRotate} /> ไม่อนุมัติ ส่งกลับเจ้าหน้าที่</button>
-                    </div>
-                  </div>
-                )}
-                {selected.case.status === "IN_PROGRESS" && isCurrentAssignee && (
-                  <button type="button" className="button primary wide workflow-submit" disabled={saving} onClick={() => setTransitionTarget("INTAKE_REVIEW")}><FontAwesomeIcon icon={faCheck} /> ทีมดำเนินการเรียบร้อย ส่งผลกลับเจ้าหน้าที่</button>
-                )}
-                {selected.case.status === "IN_PROGRESS" && isTeamMember && !isCurrentAssignee && (
-                  <div className="workflow-waiting"><FontAwesomeIcon icon={faClock} /><span><small>คุณเป็นผู้ร่วมดำเนินการ</small><b>เพิ่มบันทึกผลได้ ผู้รับผิดชอบหลักเป็นผู้ส่งผลกลับเจ้าหน้าที่</b></span></div>
-                )}
-                {selected.case.status === "INTAKE_REVIEW" && (hasRole("INTAKE") || hasRole("SUPER_ADMIN")) && (
-                  <div className="workflow-decision-actions">
-                    <button type="button" className="button primary" disabled={saving} onClick={() => setTransitionTarget("CLOSED")}><FontAwesomeIcon icon={faCheckCircle} /> ตรวจผลแล้ว ปิดเคส</button>
-                    {selected.assignments?.length > 0 && <button type="button" className="button secondary" disabled={saving} onClick={() => setTransitionTarget("IN_PROGRESS")}><FontAwesomeIcon icon={faRotate} /> ส่งกลับทีมเดิมดำเนินการต่อ</button>}
-                  </div>
-                )}
-                {["DEPUTY_REVIEW", "DIRECTOR_REVIEW"].includes(String(selected.case.status)) && (
-                  <div className="workflow-waiting"><FontAwesomeIcon icon={faClock} /><span><small>อยู่ระหว่างการพิจารณา</small><b>{selected.case.status === "DEPUTY_REVIEW" ? "รอรองผู้อำนวยการดำเนินการในพอร์ทัลฝ่ายบริหาร" : "รอผู้อำนวยการดำเนินการในพอร์ทัลฝ่ายบริหาร"}</b></span></div>
-                )}
-                {canChooseAssignee && (
-                  <label className="assignee-field">
-                    <span>
-                      <FontAwesomeIcon icon={faUserShield} />
-                      1. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ (เคสเดิม)
-                    </span>
-                    <AssigneeCombobox
-                      key={String(selected.case.assigned_to ?? "unassigned")}
-                      currentUsername={String(selected.case.assigned_to ?? "")}
-                      disabled={saving}
-                      onSelect={(username, displayName) => {
-                        setPendingAssignee(username);
-                        setPendingAssigneeName(displayName);
-                      }}
-                    />
-                  </label>
-                )}
-                {selected.case.status === "SCREENING" &&
-                  (hasRole("SUPER_ADMIN") || hasRole("INTAKE")) && (
-                    <>
-                      <button
-                        type="button"
-                        className="button primary wide workflow-submit"
-                        disabled={saving || !pendingAssignee}
-                        onClick={() => setTransitionTarget("ASSIGNED")}
-                      >
-                        <FontAwesomeIcon icon={faPaperPlane} />
-                        {pendingAssigneeName
-                          ? `2. คัดกรองและมอบหมายให้ ${pendingAssigneeName}`
-                          : "2. เลือกผู้รับผิดชอบก่อนส่งต่อ"}
-                      </button>
-                      {hasRole("SUPER_ADMIN") && currentUsername && (
-                        <button
-                          type="button"
-                          className="button secondary wide workflow-submit admin-self-assign"
-                          disabled={saving}
-                          onClick={() => {
-                            setPendingAssignee(currentUsername);
-                            setPendingAssigneeName(currentDisplayName);
-                            setTransitionTarget("ASSIGNED");
-                          }}
-                        >
-                          <FontAwesomeIcon icon={faUserShield} />
-                          หรือให้แอดมินระบบรับดำเนินการเอง
-                        </button>
-                      )}
-                    </>
-                )}
-                {selected.case.status === "ASSIGNED" &&
-                  (isCurrentAssignee || isTeamMember || hasRole("SUPER_ADMIN")) && (
-                    <button
-                      type="button"
-                      className="button primary wide workflow-submit"
-                      disabled={saving}
-                      onClick={() => setTransitionTarget("IN_PROGRESS")}
-                    >
-                      <FontAwesomeIcon icon={faArrowRight} /> เริ่มดำเนินการเคส
-                    </button>
-                  )}
-                {selected.case.status === "DIRECTOR_ORDERED" &&
-                  (isCurrentAssignee || isTeamMember || hasRole("SUPER_ADMIN")) && (
-                    <button
-                      type="button"
-                      className="button primary wide workflow-submit"
-                      disabled={saving}
-                      onClick={() => setTransitionTarget("IN_PROGRESS")}
-                    >
-                      <FontAwesomeIcon icon={faArrowRight} /> รับคำสั่งและดำเนินการต่อ
-                    </button>
-                  )}
-                {selected.case.status === "ADMIN_REVIEW" &&
-                  (hasRole("SUPER_ADMIN") || hasRole("INTAKE")) && (
-                    <div className="workflow-decision-actions">
-                      <button
-                        type="button"
-                        className="button primary"
-                        disabled={saving}
-                        onClick={() => setTransitionTarget("CLOSED")}
-                      >
-                        <FontAwesomeIcon icon={faCheck} /> ตรวจผลแล้ว ปิดเคส
-                      </button>
-                      <button
-                        type="button"
-                        className="button secondary"
-                        disabled={saving}
-                        onClick={() => setTransitionTarget("DIRECTOR_REVIEW")}
-                      >
-                        <FontAwesomeIcon icon={faPaperPlane} /> เสนอผู้อำนวยการ
-                      </button>
-                    </div>
-                  )}
-                {selected.case.status === "PENDING_CLOSE" &&
-                  (hasRole("SUPER_ADMIN") || hasRole("INTAKE")) && (
-                    <button
-                      type="button"
-                      className="button primary wide workflow-submit close-case-button"
-                      disabled={saving}
-                      onClick={() => setTransitionTarget("CLOSED")}
-                    >
-                      <FontAwesomeIcon icon={faCheck} /> ยืนยันปิดเคส
-                    </button>
-                  )}
-                {selected.case.status === "RESOLVED" &&
-                  availableStatusEntries("RESOLVED", currentRoles).some(
-                    ([value]) => value === "CLOSED",
-                  ) && (
-                    <button
-                      type="button"
-                      className="button primary wide workflow-submit close-case-button"
-                      disabled={saving}
-                      onClick={() => setTransitionTarget("CLOSED")}
-                    >
-                      <FontAwesomeIcon icon={faCheck} /> ยืนยันปิดเคส
-                    </button>
-                  )}
-                {hasRole("SUPER_ADMIN") &&
-                  !(isCurrentAssignee && selected.case.status === "IN_PROGRESS") &&
-                  !["PENDING_CLOSE", "RESOLVED", "CLOSED"].includes(selected.case.status) && (
-                    <div className="direct-close-action">
-                      <span>
-                        <b>ปิดเคสโดยแอดมิน</b>
-                        <small>ข้ามขั้นตอนที่เหลือ และเพิ่มสรุปประกอบได้หากต้องการ</small>
-                      </span>
-                      <button
-                        type="button"
-                        className="button secondary direct-close-button"
-                        disabled={saving}
-                        onClick={() => setTransitionTarget("CLOSED")}
-                      >
-                        <FontAwesomeIcon icon={faCheckCircle} /> ปิดเคสทันที
-                      </button>
-                    </div>
-                  )}
-                {selected.case.status === "CLOSED" &&
-                  availableStatusEntries("CLOSED", currentRoles).some(
-                    ([value]) => value === "REOPENED",
-                  ) && (
-                    <button
-                      type="button"
-                      className="button secondary wide workflow-submit"
-                      disabled={saving}
-                      onClick={() => setTransitionTarget("REOPENED")}
-                    >
-                      <FontAwesomeIcon icon={faRotate} /> เปิดเคสอีกครั้ง
-                    </button>
-                  )}
               </div>
               <div className="case-history-grid">
               <div className="note-card internal-note-card">
@@ -2703,7 +2507,268 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                 ))}
               </div>
               </div>
+              <div className="action-card" id="case-workflow-actions">
+                <h4 className="section-title">
+                  <FontAwesomeIcon icon={faSliders} />
+                  จัดการเคส
+                </h4>
+                <CaseWorkflowProgress status={String(selected.case.status)} />
+                <div className="workflow-guidance">
+                  <FontAwesomeIcon icon={faShieldHalved} />
+                  <div>
+                    <b>
+                      ขั้นตอนปัจจุบัน: {statusLabels[String(selected.case.status)]}
+                    </b>
+                    <small>
+                      สรุปหรือเหตุผลที่กรอกตอนเปลี่ยนขั้นตอนจะแสดงในไทม์ไลน์
+                      เพื่อบอกผู้รับช่วงว่าเกิดอะไรขึ้น ส่วนบันทึกภายในใช้จดข้อมูลระหว่างทำงาน
+                    </small>
+                  </div>
+                </div>
+                {availableStatusEntries(
+                  String(selected.case.status),
+                  currentRoles,
+                  isCurrentAssignee || isTeamMember,
+                  isCurrentAssignee,
+                ).length > 1 ? (
+                  <div className="workflow-next-step">
+                    <FontAwesomeIcon icon={faArrowRight} />
+                    <span>
+                      <small>ขั้นตอนถัดไป</small>
+                      <b>
+                        {{
+                          NEW: "คัดกรองและมอบหมายผู้รับผิดชอบ",
+                          AFFAIRS_REVIEW: "ทีมกิจการพิจารณาและเลือกทีมครู",
+                          DEPUTY_REVIEW: "รองผู้อำนวยการพิจารณา",
+                          SCREENING: "เลือกผู้รับผิดชอบแล้วส่งต่อ",
+                          ASSIGNED: "เริ่มดำเนินการเคส",
+                          IN_PROGRESS: "ส่งผลการดำเนินงานให้แอดมินตรวจ",
+                          INTAKE_REVIEW: "เจ้าหน้าที่ตรวจผลและปิดเคส",
+                          ADMIN_REVIEW: "ตรวจผลแล้วปิดเคส หรือเสนอผู้อำนวยการ",
+                          DIRECTOR_ORDERED: "รับคำสั่งผู้อำนวยการและดำเนินการต่อ",
+                          PENDING_CLOSE: "ยืนยันปิดเคส",
+                          RESOLVED: "ยืนยันปิดเคส",
+                          CLOSED: "เปิดเคสอีกครั้ง",
+                          REOPENED: "คัดกรองใหม่และมอบหมายผู้รับผิดชอบ",
+                        }[String(selected.case.status)]}
+                      </b>
+                    </span>
+                  </div>
+                ) : (
+                  <div className="workflow-waiting">
+                    <FontAwesomeIcon icon={faClock} />
+                    <span>
+                      <small>ยังไม่มีรายการที่ต้องดำเนินการ</small>
+                      <b>
+                        {selected.case.status === "DIRECTOR_REVIEW"
+                          ? "รอคำสั่งจากผู้อำนวยการ"
+                          : selected.case.status === "CLOSED"
+                            ? "เคสนี้ปิดเรียบร้อยแล้ว"
+                            : "บัญชีนี้ไม่มีสิทธิ์ดำเนินการในขั้นตอนปัจจุบัน"}
+                      </b>
+                    </span>
+                  </div>
+                )}
+                <label>
+                  <span>
+                    <FontAwesomeIcon icon={faTriangleExclamation} />
+                    ระดับความสำคัญ
+                  </span>
+                  <select
+                    value={selected.case.severity}
+                    onChange={(e) => updateCase({ severity: e.target.value })}
+                    disabled={saving || !["NEW", "REOPENED"].includes(String(selected.case.status)) || !(hasRole("SUPER_ADMIN") || hasRole("INTAKE"))}
+                  >
+                    {Object.entries(severityLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="field-help">{["NEW", "REOPENED"].includes(String(selected.case.status)) ? "เจ้าหน้าที่รับเรื่องกำหนดระดับก่อนส่งต่อ" : "ยืนยันแล้วและล็อกอัตโนมัติหลังส่งต่อเคส"}</small>
+                </label>
+                {["NEW", "REOPENED"].includes(String(selected.case.status)) && (hasRole("INTAKE") || hasRole("SUPER_ADMIN")) && (
+                  <div className="workflow-decision-actions intake-routing-actions">
+                    {!['SEVERE', 'CRITICAL'].includes(String(selected.case.severity)) && <button type="button" className="button primary" disabled={saving} onClick={() => setTransitionTarget("AFFAIRS_REVIEW")}><FontAwesomeIcon icon={faPeopleGroup} /> ส่งทีมกิจการนักเรียน</button>}
+                    <button type="button" className={['SEVERE', 'CRITICAL'].includes(String(selected.case.severity)) ? "button primary" : "button secondary"} disabled={saving} onClick={() => setTransitionTarget("DEPUTY_REVIEW")}><FontAwesomeIcon icon={faShieldHalved} /> ส่งรองผู้อำนวยการ</button>
+                    <button type="button" className="button secondary close-case-button" disabled={saving} onClick={() => setTransitionTarget("CLOSED")}><FontAwesomeIcon icon={faCheckCircle} /> <Phrases text="พิจารณาแล้ว ปิดเคส" /></button>
+                  </div>
+                )}
+                {selected.case.status === "AFFAIRS_REVIEW" && (hasRole("STUDENT_AFFAIRS") || hasRole("SUPER_ADMIN")) && (
+                  <div className="affairs-review-panel">
+                    <h5><FontAwesomeIcon icon={faPeopleGroup} /> เลือกทีมผู้ดำเนินการ</h5>
+                    <TeamAssigneePicker selected={pendingTeam} lead={leadAssignee} disabled={saving} onChange={(team, lead) => { setPendingTeam(team); setLeadAssignee(lead); }} />
+                    <div className="workflow-decision-actions">
+                      <button type="button" className="button primary" disabled={saving || pendingTeam.length === 0 || !leadAssignee} onClick={() => setTransitionTarget("IN_PROGRESS")}><FontAwesomeIcon icon={faPaperPlane} /> อนุมัติและมอบหมาย</button>
+                      <button type="button" className="button secondary" disabled={saving} onClick={() => setTransitionTarget("INTAKE_REVIEW")}><FontAwesomeIcon icon={faRotate} /> <Phrases text="ไม่อนุมัติ ส่งกลับเจ้าหน้าที่" /></button>
+                    </div>
+                  </div>
+                )}
+                {selected.case.status === "IN_PROGRESS" && isCurrentAssignee && (
+                  <button type="button" className="button primary wide workflow-submit" disabled={saving} onClick={() => setTransitionTarget("INTAKE_REVIEW")}><FontAwesomeIcon icon={faCheck} /> <Phrases text="ทีมดำเนินการเรียบร้อย ส่งผลกลับเจ้าหน้าที่" /></button>
+                )}
+                {selected.case.status === "IN_PROGRESS" && isTeamMember && !isCurrentAssignee && (
+                  <div className="workflow-waiting"><FontAwesomeIcon icon={faClock} /><span><small>คุณเป็นผู้ร่วมดำเนินการ</small><b>เพิ่มบันทึกผลได้ ผู้รับผิดชอบหลักเป็นผู้ส่งผลกลับเจ้าหน้าที่</b></span></div>
+                )}
+                {selected.case.status === "INTAKE_REVIEW" && (hasRole("INTAKE") || hasRole("SUPER_ADMIN")) && (
+                  <div className="workflow-decision-actions">
+                    <button type="button" className="button primary close-case-button" disabled={saving} onClick={() => setTransitionTarget("CLOSED")}><FontAwesomeIcon icon={faCheckCircle} /> <Phrases text="ตรวจผลแล้ว ปิดเคส" /></button>
+                    {selected.assignments?.length > 0 && <button type="button" className="button secondary" disabled={saving} onClick={() => setTransitionTarget("IN_PROGRESS")}><FontAwesomeIcon icon={faRotate} /> ส่งกลับทีมเดิมดำเนินการต่อ</button>}
+                  </div>
+                )}
+                {["DEPUTY_REVIEW", "DIRECTOR_REVIEW"].includes(String(selected.case.status)) && (
+                  <div className="workflow-waiting"><FontAwesomeIcon icon={faClock} /><span><small>อยู่ระหว่างการพิจารณา</small><b>{selected.case.status === "DEPUTY_REVIEW" ? "รอรองผู้อำนวยการดำเนินการในพอร์ทัลฝ่ายบริหาร" : "รอผู้อำนวยการดำเนินการในพอร์ทัลฝ่ายบริหาร"}</b></span></div>
+                )}
+                {canChooseAssignee && (
+                  <label className="assignee-field">
+                    <span>
+                      <FontAwesomeIcon icon={faUserShield} />
+                      1. เลือกครูหรือเจ้าหน้าที่ผู้รับผิดชอบ (เคสเดิม)
+                    </span>
+                    <AssigneeCombobox
+                      key={String(selected.case.assigned_to ?? "unassigned")}
+                      currentUsername={String(selected.case.assigned_to ?? "")}
+                      disabled={saving}
+                      onSelect={(username, displayName) => {
+                        setPendingAssignee(username);
+                        setPendingAssigneeName(displayName);
+                      }}
+                    />
+                  </label>
+                )}
+                {selected.case.status === "SCREENING" &&
+                  (hasRole("SUPER_ADMIN") || hasRole("INTAKE")) && (
+                    <>
+                      <button
+                        type="button"
+                        className="button primary wide workflow-submit"
+                        disabled={saving || !pendingAssignee}
+                        onClick={() => setTransitionTarget("ASSIGNED")}
+                      >
+                        <FontAwesomeIcon icon={faPaperPlane} />
+                        {pendingAssigneeName
+                          ? `2. คัดกรองและมอบหมายให้ ${pendingAssigneeName}`
+                          : "2. เลือกผู้รับผิดชอบก่อนส่งต่อ"}
+                      </button>
+                      {hasRole("SUPER_ADMIN") && currentUsername && (
+                        <button
+                          type="button"
+                          className="button secondary wide workflow-submit admin-self-assign"
+                          disabled={saving}
+                          onClick={() => {
+                            setPendingAssignee(currentUsername);
+                            setPendingAssigneeName(currentDisplayName);
+                            setTransitionTarget("ASSIGNED");
+                          }}
+                        >
+                          <FontAwesomeIcon icon={faUserShield} />
+                          หรือให้แอดมินระบบรับดำเนินการเอง
+                        </button>
+                      )}
+                    </>
+                )}
+                {selected.case.status === "ASSIGNED" &&
+                  (isCurrentAssignee || isTeamMember || hasRole("SUPER_ADMIN")) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("IN_PROGRESS")}
+                    >
+                      <FontAwesomeIcon icon={faArrowRight} /> เริ่มดำเนินการเคส
+                    </button>
+                  )}
+                {selected.case.status === "DIRECTOR_ORDERED" &&
+                  (isCurrentAssignee || isTeamMember || hasRole("SUPER_ADMIN")) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("IN_PROGRESS")}
+                    >
+                      <FontAwesomeIcon icon={faArrowRight} /> รับคำสั่งและดำเนินการต่อ
+                    </button>
+                  )}
+                {selected.case.status === "ADMIN_REVIEW" &&
+                  (hasRole("SUPER_ADMIN") || hasRole("INTAKE")) && (
+                    <div className="workflow-decision-actions">
+                      <button
+                        type="button"
+                        className="button primary close-case-button"
+                        disabled={saving}
+                        onClick={() => setTransitionTarget("CLOSED")}
+                      >
+                        <FontAwesomeIcon icon={faCheck} /> <Phrases text="ตรวจผลแล้ว ปิดเคส" />
+                      </button>
+                      <button
+                        type="button"
+                        className="button secondary"
+                        disabled={saving}
+                        onClick={() => setTransitionTarget("DIRECTOR_REVIEW")}
+                      >
+                        <FontAwesomeIcon icon={faPaperPlane} /> เสนอผู้อำนวยการ
+                      </button>
+                    </div>
+                  )}
+                {selected.case.status === "PENDING_CLOSE" &&
+                  (hasRole("SUPER_ADMIN") || hasRole("INTAKE")) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit close-case-button"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("CLOSED")}
+                    >
+                      <FontAwesomeIcon icon={faCheck} /> ยืนยันปิดเคส
+                    </button>
+                  )}
+                {selected.case.status === "RESOLVED" &&
+                  availableStatusEntries("RESOLVED", currentRoles).some(
+                    ([value]) => value === "CLOSED",
+                  ) && (
+                    <button
+                      type="button"
+                      className="button primary wide workflow-submit close-case-button"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("CLOSED")}
+                    >
+                      <FontAwesomeIcon icon={faCheck} /> ยืนยันปิดเคส
+                    </button>
+                  )}
+                {hasRole("SUPER_ADMIN") &&
+                  !(isCurrentAssignee && selected.case.status === "IN_PROGRESS") &&
+                  !["PENDING_CLOSE", "RESOLVED", "CLOSED"].includes(selected.case.status) && (
+                    <div className="direct-close-action">
+                      <span>
+                        <b>ปิดเคสโดยแอดมิน</b>
+                        <small>ข้ามขั้นตอนที่เหลือ และเพิ่มสรุปประกอบได้หากต้องการ</small>
+                      </span>
+                      <button
+                        type="button"
+                        className="button secondary direct-close-button"
+                        disabled={saving}
+                        onClick={() => setTransitionTarget("CLOSED")}
+                      >
+                        <FontAwesomeIcon icon={faCheckCircle} /> ปิดเคสทันที
+                      </button>
+                    </div>
+                  )}
+                {selected.case.status === "CLOSED" &&
+                  availableStatusEntries("CLOSED", currentRoles).some(
+                    ([value]) => value === "REOPENED",
+                  ) && (
+                    <button
+                      type="button"
+                      className="button secondary wide workflow-submit"
+                      disabled={saving}
+                      onClick={() => setTransitionTarget("REOPENED")}
+                    >
+                      <FontAwesomeIcon icon={faRotate} /> เปิดเคสอีกครั้ง
+                    </button>
+                  )}
+              </div>
               {hasRole("SUPER_ADMIN") && (
+                <details className="admin-tools-details">
+                <summary><FontAwesomeIcon icon={faShieldHalved} /> เครื่องมือผู้ดูแลระบบ</summary>
                 <section className="admin-tools-card">
                   <header>
                     <span>
@@ -2728,6 +2793,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                     </button>
                   </div>
                 </section>
+                </details>
               )}
             </div>
           </section>

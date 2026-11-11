@@ -153,6 +153,10 @@ export async function GET(request: Request) {
       if (!visibility.length) return Response.json({ cases: [] });
       clauses.push(`(${visibility.join(" OR ")})`);
     }
+    // Counters use what this account may see, before any search or filter,
+    // so they stay true when the list is filtered or longer than one page.
+    const visibleWhere = clauses.join(" AND ");
+    const visibleValues = [...values];
     if (status) { clauses.push("c.status=?"); values.push(status); }
     if (severity) { clauses.push("c.severity=?"); values.push(severity); }
     if (search) { clauses.push("(c.case_number LIKE ? OR c.title LIKE ?)"); values.push(`%${search}%`, `%${search}%`); }
@@ -166,7 +170,12 @@ export async function GET(request: Request) {
        JOIN students s ON s.id=c.student_id
        WHERE ${clauses.join(" AND ")} ORDER BY ${STAFF_CASE_ORDER} LIMIT 100`,
     ).bind(...values).all();
-    return Response.json({ cases: results });
+    const counted = await db.prepare(
+      `SELECT c.status,COUNT(*) total FROM cases c JOIN students s ON s.id=c.student_id
+       WHERE ${visibleWhere} GROUP BY c.status`,
+    ).bind(...visibleValues).all<{ status: string; total: number }>();
+    const statusCounts = Object.fromEntries(counted.results.map((row) => [row.status, Number(row.total)]));
+    return Response.json({ cases: results, statusCounts });
   } catch (error) {
     if (error instanceof Response) return error;
     return jsonError("ไม่สามารถโหลดเคสได้", 500);

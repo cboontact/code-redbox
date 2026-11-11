@@ -33,11 +33,12 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     const { caseNumber } = await context.params;
     const caseRow = await db.prepare(`SELECT c.id,c.case_number,c.student_id,c.category_id,c.title,c.description,c.location,
       c.people_involved,c.requested_help,c.safety_level,c.is_anonymous,c.requires_immediate_review,
-      c.severity,c.status,c.assigned_to,c.exclusive_reviewer_username,assignee.display_name assigned_name,c.created_at,c.updated_at,
+      c.severity,c.status,c.assigned_to,c.exclusive_reviewer_username,assignee.display_name assigned_name,assignee_advisor.phone assigned_phone,c.created_at,c.updated_at,
       cc.name category_name,s.student_code,s.prefix,s.first_name,s.last_name,
       s.level,s.classroom,s.number,s.advisor1 legacy_advisor1,s.advisor2 legacy_advisor2
       FROM cases c JOIN case_categories cc ON cc.id=c.category_id
       JOIN students s ON s.id=c.student_id LEFT JOIN staff_users assignee ON assignee.username=c.assigned_to
+      LEFT JOIN advisors assignee_advisor ON assignee_advisor.id=assignee.advisor_id
       WHERE c.case_number=?`).bind(caseNumber).first<Record<string, unknown>>();
     if (!caseRow) return jsonError("ไม่พบเคส", 404);
     if (isExclusiveReviewPending(caseRow) && caseRow.exclusive_reviewer_username !== session.username) return jsonError("ไม่พบเคส", 404);
@@ -52,6 +53,16 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
     if (!sessionHasAnyRole(session, ["SUPER_ADMIN", "INTAKE"]) && !directlyAssigned && !affairsQueue && !roomAccess) return jsonError("ไม่มีสิทธิ์เปิดเคสนี้", 403);
 
     const item = attachAdvisorData(caseRow, await loadRoomAdvisors(db, String(caseRow.level), String(caseRow.classroom))) as Record<string, unknown>;
+    // Phone numbers are for staff who can already open this case; the public
+    // student lookup uses the same advisor loader and must never receive them.
+    const roomAdvisors = (item.advisors ?? []) as Array<{ id: string; display_name: string }>;
+    const advisorIds = roomAdvisors.map((advisor) => advisor.id).filter((id) => !id.startsWith("legacy-"));
+    const advisorPhones = new Map<string, string | null>();
+    if (advisorIds.length) {
+      const phoneRows = await db.prepare(`SELECT id,phone FROM advisors WHERE id IN (${advisorIds.map(() => "?").join(",")})`).bind(...advisorIds).all<{ id: string; phone: string | null }>();
+      for (const row of phoneRows.results) advisorPhones.set(row.id, row.phone);
+    }
+    item.advisor_contacts = roomAdvisors.map((advisor) => ({ name: advisor.display_name, phone: advisorPhones.get(advisor.id) || null }));
     const canRevealIdentity = sessionCanViewStudentIdentity(session);
     if (Number(caseRow.is_anonymous) === 1 && !canRevealIdentity) {
       item.prefix = ""; item.first_name = "ปกปิดตัวตน"; item.last_name = ""; item.student_code = null; item.reporter_name = "ปกปิดตัวตน";
@@ -64,7 +75,8 @@ export async function GET(request: Request, context: { params: Promise<{ caseNum
       db.prepare("SELECT * FROM case_notes WHERE case_id=? ORDER BY created_at DESC").bind(caseId).all(),
       db.prepare("SELECT id,original_name,storage_key,mime_type,file_size,created_at FROM case_attachments WHERE case_id=? ORDER BY created_at DESC").bind(caseId).all(),
       db.prepare(`SELECT ca.id,ca.username,ca.assignment_role,ca.status,ca.completed_at,ca.created_at,
-        su.display_name,COALESCE((SELECT GROUP_CONCAT(sur.role,'|') FROM staff_user_roles sur WHERE sur.user_id=su.id),'') role_values
+        su.display_name,COALESCE((SELECT GROUP_CONCAT(sur.role,'|') FROM staff_user_roles sur WHERE sur.user_id=su.id),'') role_values,
+        (SELECT a.phone FROM advisors a WHERE a.id=su.advisor_id) phone
         FROM case_assignments ca JOIN staff_users su ON su.id=ca.user_id WHERE ca.case_id=?
         ORDER BY CASE ca.assignment_role WHEN 'LEAD' THEN 0 ELSE 1 END,su.display_name`).bind(caseId).all(),
     ]);
