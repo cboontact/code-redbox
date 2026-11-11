@@ -36,7 +36,10 @@ const createSchema = z.object({
   idempotencyKey: z.string().uuid(),
   identityNumber: z.string().transform(normalizeStudentIdentity).refine(isValidStudentIdentity).optional(),
   trackingPassword: z.string().regex(/^\d{6}$/).optional(),
+  pdpaConsent: z.boolean().optional(),
 });
+
+const PDPA_NOTICE_VERSION = "2026-11";
 
 function yearInBangkok() {
   return new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Asia/Bangkok" }).format(new Date());
@@ -46,6 +49,7 @@ export async function POST(request: Request) {
   try {
     const input = createSchema.safeParse(await request.json());
     if (!input.success) return jsonError("ตรวจข้อมูลที่จำเป็นให้ครบก่อนส่งเรื่องนะ");
+    if (input.data.pdpaConsent !== true) return jsonError("กรุณากดยอมรับการใช้ข้อมูลส่วนบุคคลก่อนส่งเรื่อง");
     const db = await ensureDatabase();
     const studentAccess = await db.prepare("SELECT id,level,classroom,identity_number_hash FROM students WHERE id=? AND is_active=1").bind(input.data.studentId).first<{ id: string; level: string; classroom: string; identity_number_hash: string | null }>();
     if (!studentAccess) return jsonError("ไม่พบข้อมูลนักเรียน", 404);
@@ -99,6 +103,10 @@ export async function POST(request: Request) {
       db.prepare(
         "INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)",
       ).bind(createId("audit"), "CREATE_CASE", "case", id, "student", input.data.idempotencyKey),
+      // Proof that the student accepted the data-use notice, and which wording they saw.
+      db.prepare(
+        "INSERT INTO audit_logs (id,action,resource,resource_id,actor,metadata) VALUES (?,?,?,?,?,?)",
+      ).bind(createId("audit"), "PDPA_CONSENT", "case", id, "student", JSON.stringify({ noticeVersion: PDPA_NOTICE_VERSION, acceptedAt: new Date().toISOString() })),
     ];
     if (exclusiveReviewer) {
       statements.splice(2, 0, db.prepare(

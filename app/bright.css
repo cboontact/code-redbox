@@ -383,3 +383,41 @@ label>span, .form-grid label>span, .login-form label>span, .tracking-password-bo
   .management-summary article, .user-role-summary article { padding:14px; border-radius:20px; }
   .dashboard-heading, .management-header { gap:12px; }
 }
+
+/* ---------- PDPA consent (review step) ---------- */
+.pdpa-box { margin-top:20px; padding:22px; border-radius:26px; background:#eef6ff; }
+.pdpa-head { display:flex; align-items:center; gap:14px; }
+.pdpa-head>svg { box-sizing:content-box; flex:none; width:22px; height:22px; padding:13px; border-radius:16px; background:#fff; color:#1f6fd0; }
+.pdpa-head h3 { margin:0; font-size:18px; font-weight:700; line-height:1.3; color:#173a6b; }
+.pdpa-head p { margin:2px 0 0; font-size:13.5px; color:#3b5d8c; }
+.pdpa-points { list-style:none; margin:16px 0 0; padding:0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.pdpa-points li { display:flex; flex-direction:column; gap:10px; padding:14px; border-radius:18px; background:#fff; font-size:13.5px; line-height:1.55; color:#3a3f52; }
+.pdpa-points li>svg { box-sizing:content-box; width:16px; height:16px; padding:9px; border-radius:12px; }
+.pdpa-points li:nth-child(1)>svg { background:var(--rb-yellow); color:#a87400; }
+.pdpa-points li:nth-child(2)>svg { background:#ffd0d6; color:#e11d48; }
+.pdpa-points li:nth-child(3)>svg { background:var(--rb-mint); color:#0c9a66; }
+.pdpa-points b { display:block; margin-bottom:2px; font-size:14.5px; color:var(--rb-ink); }
+.pdpa-more { margin-top:12px; border-radius:18px; background:#fff; }
+.pdpa-more summary { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 16px; cursor:pointer; font-size:14.5px; font-weight:700; color:#1f6fd0; list-style:none; }
+.pdpa-more summary::-webkit-details-marker { display:none; }
+.pdpa-more summary::after { content:"+"; flex:none; width:26px; height:26px; display:grid; place-items:center; border-radius:50%; background:#eef6ff; font-size:18px; line-height:1; }
+.pdpa-more[open] summary::after { content:"–"; }
+.pdpa-more>div { padding:0 16px 14px; }
+.pdpa-more p { margin:0 0 10px; font-size:14px; line-height:1.7; color:#3a3f52; }
+.pdpa-more p:last-child { margin-bottom:0; }
+.pdpa-accept { position:relative; display:flex; align-items:center; gap:14px; margin-top:14px; padding:16px; border:2px solid #b9d6fb; border-radius:20px; background:#fff; cursor:pointer; font-size:15.5px; font-weight:700; line-height:1.5; transition:border-color .15s ease, box-shadow .15s ease; }
+.pdpa-accept input { position:absolute; opacity:0; width:1px; height:1px; }
+.pdpa-accept>span:last-child { margin:0; font-size:15.5px; font-weight:700; color:var(--rb-ink); }
+.pdpa-tick { flex:none; width:30px; height:30px; margin:0; display:grid; place-items:center; border:2px solid #9fb6d6; border-radius:10px; background:#fff; color:transparent; font-size:14px; transition:background .15s ease, border-color .15s ease; }
+.pdpa-accept:hover { border-color:#1f6fd0; }
+.pdpa-accept:has(input:focus-visible) { box-shadow:0 0 0 4px rgba(31,111,208,.25); }
+.pdpa-accept.checked { border-color:#0c9a66; box-shadow:0 0 0 4px rgba(12,154,102,.14); }
+.pdpa-accept.checked .pdpa-tick { border-color:#0c9a66; background:#0c9a66; color:#fff; }
+@media (max-width:600px) {
+  .pdpa-box { padding:16px; border-radius:22px; }
+  .pdpa-points { grid-template-columns:1fr; }
+  .pdpa-points li { flex-direction:row; align-items:flex-start; }
+  .pdpa-points li>svg { flex:none; }
+  .pdpa-accept { padding:14px; gap:12px; }
+  .pdpa-accept>span:last-child { font-size:15px; }
+}

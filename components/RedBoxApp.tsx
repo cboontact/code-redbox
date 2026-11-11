@@ -591,6 +591,7 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
     safetyLevel: "SAFE" as "SAFE" | "UNSURE" | "UNSAFE",
   });
   const [files, setFiles] = useState<File[]>([]);
+  const [pdpaAccepted, setPdpaAccepted] = useState(false);
 
   useEffect(() => {
     fetch("/api/categories")
@@ -656,7 +657,7 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
   }
 
   async function submitReport() {
-    if (!student || loading) return;
+    if (!student || loading || !pdpaAccepted) return;
     setLoading(true);
     setError("");
     try {
@@ -670,6 +671,7 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
           identityNumber: student.has_identity_number ? normalizeStudentIdentity(identityNumber) : undefined,
           trackingPassword: student.has_identity_number ? undefined : trackingPassword,
           idempotencyKey: idempotencyKeyRef.current,
+          pdpaConsent: pdpaAccepted,
         }),
       });
       const data = await readJson<{
@@ -1169,6 +1171,78 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
                   <p>{form.description}</p>
                 </div>
               </div>
+              <section className="pdpa-box" aria-labelledby="pdpa-title">
+                <div className="pdpa-head">
+                  <FontAwesomeIcon icon={faShieldHalved} />
+                  <div>
+                    <h3 id="pdpa-title">การใช้ข้อมูลส่วนบุคคล (PDPA)</h3>
+                    <p>อ่านให้ครบก่อนกดยอมรับ</p>
+                  </div>
+                </div>
+                <ul className="pdpa-points">
+                  <li>
+                    <FontAwesomeIcon icon={faFolderOpen} />
+                    <span>
+                      <b>ข้อมูลที่เก็บ</b>
+                      ชื่อ ชั้น ห้อง เลขประจำตัวนักเรียน เรื่องที่แจ้ง
+                      และไฟล์หลักฐานที่แนบ
+                    </span>
+                  </li>
+                  <li>
+                    <FontAwesomeIcon icon={faHeart} />
+                    <span>
+                      <b>ใช้เพื่ออะไร</b>
+                      เพื่อรับเรื่อง ดูแลช่วยเหลือ
+                      และติดตามผลให้นักเรียนเท่านั้น
+                    </span>
+                  </li>
+                  <li>
+                    <FontAwesomeIcon icon={faPeopleGroup} />
+                    <span>
+                      <b>ใครเห็นได้</b>
+                      เจ้าหน้าที่รับเรื่อง ครูที่ได้รับมอบหมาย
+                      และผู้บริหารที่เกี่ยวข้องกับเรื่องนี้
+                    </span>
+                  </li>
+                </ul>
+                <details className="pdpa-more">
+                  <summary>อ่านรายละเอียดทั้งหมด</summary>
+                  <div>
+                    <p>
+                      โรงเรียนจอมทองเก็บและใช้ข้อมูลข้างต้นเพื่อการดูแลช่วยเหลือนักเรียนผ่านระบบกล่องแดง
+                      ข้อมูลจะไม่ถูกเปิดเผยต่อบุคคลภายนอกโรงเรียน
+                      เว้นแต่จำเป็นเพื่อความปลอดภัยของนักเรียนหรือกฎหมายกำหนด
+                    </p>
+                    <p>
+                      หากเลือกปกปิดตัวตน ครูและเจ้าหน้าที่ทั่วไปจะไม่เห็นชื่อ
+                      แต่ระบบยังบันทึกว่าเรื่องมาจากใคร
+                      เพื่อให้ช่วยเหลือได้เมื่อจำเป็น
+                    </p>
+                    <p>
+                      เลขประจำตัวประชาชนหรือรหัส G
+                      ใช้ยืนยันตัวตนเท่านั้น ระบบไม่เก็บเลขจริงไว้
+                    </p>
+                    <p>
+                      นักเรียนมีสิทธิ์ขอดู ขอแก้ไข หรือขอลบข้อมูลของตนเอง
+                      และถอนความยินยอมได้
+                      โดยติดต่อกิจการนักเรียน โทร 053-341-550
+                    </p>
+                  </div>
+                </details>
+                <label className={pdpaAccepted ? "pdpa-accept checked" : "pdpa-accept"}>
+                  <input
+                    type="checkbox"
+                    checked={pdpaAccepted}
+                    onChange={(e) => setPdpaAccepted(e.target.checked)}
+                  />
+                  <span className="pdpa-tick">
+                    <FontAwesomeIcon icon={faCheck} />
+                  </span>
+                  <span>
+                    ฉันอ่านและยอมรับให้โรงเรียนเก็บและใช้ข้อมูลตามที่ระบุไว้ข้างต้น
+                  </span>
+                </label>
+              </section>
             </div>
           )}
           {error && (
@@ -1201,7 +1275,8 @@ function ReportWizard({ notify }: { notify: (message: string) => void }) {
             ) : (
               <button
                 className="button primary"
-                disabled={loading}
+                disabled={loading || !pdpaAccepted}
+                title={pdpaAccepted ? undefined : "กดยอมรับการใช้ข้อมูลส่วนบุคคลก่อนส่งเรื่อง"}
                 onClick={submitReport}
               >
                 {loading ? (
