@@ -538,3 +538,10 @@ label>span, .form-grid label>span, .login-form label>span, .tracking-password-bo
 .stat-card:nth-child(3)>span { background:#ffe0c2; color:#e8730c; }
 .stat-card:nth-child(4)>span { background:var(--rb-yellow); color:#a87400; }
 .stat-card:nth-child(5)>span { background:var(--rb-lav); color:#6a4df4; }
+
+/* Closing straight from intake is an exception, so it must not look like the next step.
+   The strong green close button is kept for stages where closing is the expected action. */
+.workflow-decision-actions .button.close-optional { grid-column:1/-1; justify-self:start; min-height:44px; padding:0 18px; color:var(--rb-soft); font-size:14.5px; font-weight:600; background:#fff; border:2px dashed #d5d8e2; box-shadow:none; }
+.workflow-decision-actions .button.close-optional svg { color:#9aa0b4; }
+.workflow-decision-actions .button.close-optional:hover:not(:disabled) { color:#0a7a52; border-color:#0c9a66; border-style:solid; background:#f2fbf7; }
+.workflow-decision-actions .button.close-optional:hover:not(:disabled) svg { color:#0c9a66; }

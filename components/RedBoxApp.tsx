@@ -2736,7 +2736,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
                   <div className="workflow-decision-actions intake-routing-actions">
                     {!['SEVERE', 'CRITICAL'].includes(String(selected.case.severity)) && <button type="button" className="button primary" disabled={saving} onClick={() => setTransitionTarget("AFFAIRS_REVIEW")}><FontAwesomeIcon icon={faPeopleGroup} /> ส่งทีมกิจการนักเรียน</button>}
                     <button type="button" className={['SEVERE', 'CRITICAL'].includes(String(selected.case.severity)) ? "button primary" : "button secondary"} disabled={saving} onClick={() => setTransitionTarget("DEPUTY_REVIEW")}><FontAwesomeIcon icon={faShieldHalved} /> ส่งรองผู้อำนวยการ</button>
-                    <button type="button" className="button secondary close-case-button" disabled={saving} onClick={() => setTransitionTarget("CLOSED")}><FontAwesomeIcon icon={faCheckCircle} /> <Phrases text="พิจารณาแล้ว ปิดเคส" /></button>
+                    <button type="button" className="button secondary close-optional" disabled={saving} onClick={() => setTransitionTarget("CLOSED")}><FontAwesomeIcon icon={faCheckCircle} /> <Phrases text="พิจารณาแล้ว ปิดเคส" /></button>
                   </div>
                 )}
                 {selected.case.status === "AFFAIRS_REVIEW" && (hasRole("STUDENT_AFFAIRS") || hasRole("SUPER_ADMIN")) && (
