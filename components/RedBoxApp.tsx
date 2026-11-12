@@ -163,10 +163,12 @@ const dashboardStatusFilters = {
 } as const satisfies Record<string, readonly CaseStatus[]>;
 type DashboardStatusFilter = keyof typeof dashboardStatusFilters;
 const dashboardBuckets: Array<{ key: DashboardStatusFilter; label: string }> = [
+  // The two buckets the intake officer owns come first, so work waiting to be
+  // checked and closed is not buried under cases other people are handling.
   { key: "new", label: "รับเรื่องแล้ว" },
+  { key: "review", label: "รอตรวจผล / ปิด" },
   { key: "pending", label: "รอพิจารณา / มอบหมาย" },
   { key: "active", label: "กำลังดำเนินการ" },
-  { key: "review", label: "รอตรวจผล / ปิด" },
   { key: "closed", label: "เสร็จสิ้น" },
 ];
 function matchesDashboardStatus(filter: DashboardStatusFilter, status: CaseStatus) {
@@ -2075,7 +2077,11 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
   const rolesForActions = currentRoles.length ? currentRoles : currentRole ? [currentRole] : [];
   const waitingFor = (item: CaseRecord) => actionNeeded(item, rolesForActions, currentUsername);
   const needsAttention = (item: CaseRecord) => Boolean(waitingFor(item)) || isFollowUpDue(item);
-  const waitingCases = visibleCases.filter(needsAttention);
+  const bucketRank = (item: CaseRecord) => {
+    const index = dashboardBuckets.findIndex((group) => matchesDashboardStatus(group.key, item.status));
+    return index === -1 ? dashboardBuckets.length : index;
+  };
+  const waitingCases = visibleCases.filter(needsAttention).sort((a, b) => bucketRank(a) - bucketRank(b));
   const waitingTotal = cases.filter(needsAttention).length;
   const bucketHasWaiting = (key: DashboardStatusFilter) => cases.some((item) => matchesDashboardStatus(key, item.status) && needsAttention(item));
   // Work waiting for this account is pinned to the top; everything else keeps the counters' order.
@@ -2208,6 +2214,14 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               alert={bucketHasWaiting("new")}
             />
             <Stat
+              icon={faMagnifyingGlass}
+              label="รอตรวจผล / ปิด"
+              value={counts.review}
+              tone="purple"
+              active={quickFilter === "review"}
+              alert={bucketHasWaiting("review")}
+            />
+            <Stat
               icon={faClock}
               label="รอพิจารณา / มอบหมาย"
               value={counts.pending}
@@ -2224,14 +2238,6 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               alert={bucketHasWaiting("active")}
             />
             <Stat
-              icon={faMagnifyingGlass}
-              label="รอตรวจผล / ปิด"
-              value={counts.review}
-              tone="purple"
-              active={quickFilter === "review"}
-              alert={bucketHasWaiting("review")}
-            />
-            <Stat
               icon={faCheckCircle}
               label="เสร็จสิ้น"
               value={counts.closed}
@@ -2245,7 +2251,7 @@ function AdminDashboard({ notify }: { notify: (message: string) => void }) {
               <div>
                 <h2>รายการเคสล่าสุด</h2>
                 <p>
-                  เรียงจากยังไม่ได้ดำเนินการ → กำลังดำเนินการ → เสร็จสิ้น
+                  เคสที่รอคุณอยู่บนสุด จากนั้นเรียงจากยังไม่ได้ดำเนินการ → กำลังดำเนินการ → เสร็จสิ้น
                   และเรียงรายการล่าสุดก่อนภายในแต่ละกลุ่ม
                 </p>
               </div>

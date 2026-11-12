@@ -533,3 +533,8 @@ label>span, .form-grid label>span, .login-form label>span, .tracking-password-bo
   .dashboard-content .dashboard-heading .button { flex:none; width:46px; min-width:46px; padding:0; font-size:0; overflow:hidden; }
   .dashboard-content .dashboard-heading .button svg { font-size:16px; }
 }
+
+/* Counter order is now: all, new, review, pending, active, closed — icon colours follow the bucket, not the slot. */
+.stat-card:nth-child(3)>span { background:#ffe0c2; color:#e8730c; }
+.stat-card:nth-child(4)>span { background:var(--rb-yellow); color:#a87400; }
+.stat-card:nth-child(5)>span { background:var(--rb-lav); color:#6a4df4; }
