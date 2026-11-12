@@ -59,8 +59,9 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
     setSavingPassword(true);
     try {
       const response = await fetch("/api/auth/change-password", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ currentPassword: passwordForm.current, newPassword: passwordForm.next }) });
-      const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "เปลี่ยนรหัสผ่านไม่สำเร็จ");
+      // A gateway or runtime failure can return a non-JSON page; show the status instead of a parse error.
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error ?? `เปลี่ยนรหัสผ่านไม่สำเร็จ (รหัสตอบกลับ ${response.status})`);
       setPasswordOpen(false); setPasswordForm({ current: "", next: "", confirm: "" });
       setCurrentUser((user) => user ? { ...user, mustChangePassword: false } : user);
       setToast({ text: "เปลี่ยนรหัสผ่านเรียบร้อยแล้ว", type: "success" });
