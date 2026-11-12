@@ -402,8 +402,96 @@ const homeSteps = [
 ];
 
 function HomeContent() {
+  const rootRef = useRef<HTMLElement | null>(null);
+  // Depth effects: the hero scene leans toward the pointer (and turns a little while
+  // scrolling on phones), cards tilt under the cursor, sections rise in as they appear.
+  // Everything is skipped for visitors who ask for reduced motion.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !("IntersectionObserver" in window)) return;
+    root.classList.add("rb-live");
+    // Safety net: anything already on screen is shown even if the observer never reports it.
+    const revealVisible = () => {
+      root.querySelectorAll<HTMLElement>(".rb-reveal:not(.is-in)").forEach((element) => {
+        if (element.getBoundingClientRect().top < window.innerHeight * 0.92) element.classList.add("is-in");
+      });
+    };
+    const safety = window.setTimeout(revealVisible, 1200);
+    window.addEventListener("scroll", revealVisible, { passive: true });
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-in");
+          observer.unobserve(entry.target);
+        }
+      }
+    }, { threshold: 0.12 });
+    root.querySelectorAll(".rb-reveal").forEach((element) => observer.observe(element));
+    const stopReveal = () => {
+      observer.disconnect();
+      window.clearTimeout(safety);
+      window.removeEventListener("scroll", revealVisible);
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return stopReveal;
+
+    const hero = root.querySelector<HTMLElement>(".rb-hero");
+    let frame = 0;
+    const clearTilt = (except?: HTMLElement | null) => {
+      root.querySelectorAll<HTMLElement>("[data-tilt].is-tilting").forEach((element) => {
+        if (element === except) return;
+        element.classList.remove("is-tilting");
+        element.style.removeProperty("--rx");
+        element.style.removeProperty("--ry");
+      });
+    };
+    const onMove = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        if (hero) {
+          const box = hero.getBoundingClientRect();
+          const x = Math.max(-0.6, Math.min(0.6, (event.clientX - box.left) / box.width - 0.5));
+          const y = Math.max(-0.6, Math.min(0.6, (event.clientY - box.top) / box.height - 0.5));
+          hero.style.setProperty("--px", x.toFixed(3));
+          hero.style.setProperty("--py", y.toFixed(3));
+        }
+        const card = (event.target as HTMLElement).closest<HTMLElement>("[data-tilt]");
+        clearTilt(card);
+        if (card) {
+          const box = card.getBoundingClientRect();
+          const x = (event.clientX - box.left) / box.width - 0.5;
+          const y = (event.clientY - box.top) / box.height - 0.5;
+          card.classList.add("is-tilting");
+          card.style.setProperty("--ry", `${(x * 12).toFixed(2)}deg`);
+          card.style.setProperty("--rx", `${(-y * 12).toFixed(2)}deg`);
+          card.style.setProperty("--gx", `${((x + 0.5) * 100).toFixed(1)}%`);
+          card.style.setProperty("--gy", `${((y + 0.5) * 100).toFixed(1)}%`);
+        }
+      });
+    };
+    const onLeave = () => {
+      window.cancelAnimationFrame(frame);
+      clearTilt();
+      hero?.style.setProperty("--px", "0");
+      hero?.style.setProperty("--py", "0");
+    };
+    const onScroll = () => {
+      hero?.style.setProperty("--sy", Math.min(1, window.scrollY / 600).toFixed(3));
+    };
+    root.addEventListener("pointermove", onMove);
+    root.addEventListener("pointerleave", onLeave);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      stopReveal();
+      window.cancelAnimationFrame(frame);
+      root.removeEventListener("pointermove", onMove);
+      root.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, []);
+
   return (
-    <main className="rb-home">
+    <main className="rb-home" ref={rootRef}>
       <div className="rb-hero">
         <span className="rb-deco rb-ring" />
         <span className="rb-deco rb-ring2" />
@@ -451,6 +539,7 @@ function HomeContent() {
           </div>
         </div>
         <div className="rb-col rb-scene" aria-hidden="true">
+          <div className="rb-stage">
           <span className="rb-sun" />
           <div className="rb-float rb-f1">
             <span className="rb-ava">
@@ -476,21 +565,30 @@ function HomeContent() {
               <Ic icon={faWrench} />
             </span>
           </div>
-          <div className="rb-redbox">
-            <span className="rb-letter">
-              <Ic icon={faHeart} />
-            </span>
-            <span className="rb-lid">
-              <span className="rb-slot" />
-            </span>
-            <span className="rb-body">
-              <span className="rb-plate">
-                <Ic icon={faEnvelopeOpenText} />
-                <b>กล่องแดง</b>
-                <small>RED BOX</small>
-              </span>
-            </span>
-            <span className="rb-ground" />
+          <div className="rb-boxwrap">
+            <div className="rb-box3d">
+              <div className="rb-cube">
+                <span className="rb-letter3d">
+                  <Ic icon={faHeart} />
+                </span>
+                <span className="rb-face rb-lid-top">
+                  <span className="rb-slot" />
+                </span>
+                <span className="rb-face rb-lid-front" />
+                <span className="rb-face rb-lid-right" />
+                <span className="rb-face rb-lid-left" />
+                <span className="rb-face rb-front">
+                  <span className="rb-plate">
+                    <Ic icon={faEnvelopeOpenText} />
+                    <b>กล่องแดง</b>
+                    <small>RED BOX</small>
+                  </span>
+                </span>
+                <span className="rb-face rb-right" />
+                <span className="rb-face rb-left" />
+                <span className="rb-ground" />
+              </div>
+            </div>
           </div>
           <div className="rb-float rb-f3">
             <div className="rb-bubble rb-dark">
@@ -498,11 +596,12 @@ function HomeContent() {
               รับเรื่องแล้ว กำลังส่งต่อให้ครู
             </div>
           </div>
+          </div>
         </div>
       </div>
 
-      <div className="rb-bento">
-        <div className="rb-tile rb-t1">
+      <div className="rb-bento rb-reveal">
+        <div className="rb-tile rb-t1" data-tilt>
           <span className="rb-ico">
             <Ic icon={faUserSecret} />
           </span>
@@ -510,7 +609,7 @@ function HomeContent() {
           <b>ไม่บอกชื่อก็ได้</b>
           <span>เลือกปกปิดตัวตน ครูทั่วไปจะไม่เห็นชื่อ</span>
         </div>
-        <div className="rb-tile rb-t2">
+        <div className="rb-tile rb-t2" data-tilt>
           <span className="rb-ico">
             <Ic icon={faRoute} />
           </span>
@@ -518,7 +617,7 @@ function HomeContent() {
           <b>ติดตามได้เอง</b>
           <span>กลับมาดูได้ตลอดว่าเรื่องไปถึงไหนแล้ว</span>
         </div>
-        <div className="rb-tile rb-t3">
+        <div className="rb-tile rb-t3" data-tilt>
           <span className="rb-ico">
             <Ic icon={faHandHoldingHeart} />
           </span>
@@ -528,7 +627,7 @@ function HomeContent() {
         </div>
       </div>
 
-      <section>
+      <section className="rb-reveal">
         <span className="rb-kicker">
           <Ic icon={faComments} />
           บอกได้ทุกเรื่อง
@@ -541,7 +640,7 @@ function HomeContent() {
           {categoryFallbacks.map((category) => {
             const topic = homeTopics[category.id];
             return (
-              <Link className="rb-topic" href="/report" key={category.id}>
+              <Link className="rb-topic" href="/report" key={category.id} data-tilt>
                 <span className={`rb-dot rb-c-${topic.tone}`}>
                   <Ic icon={topic.icon} />
                 </span>
@@ -558,7 +657,7 @@ function HomeContent() {
         </div>
       </section>
 
-      <section>
+      <section className="rb-reveal">
         <span className="rb-kicker">
           <Ic icon={faDiagramProject} />
           ขั้นตอน
@@ -580,7 +679,7 @@ function HomeContent() {
         </div>
       </section>
 
-      <div className="rb-sos">
+      <div className="rb-sos rb-reveal">
         <span className="rb-bell">
           <Ic icon={faBell} />
         </span>
