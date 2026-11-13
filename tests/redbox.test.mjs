@@ -622,7 +622,9 @@ test("uses the student's protected Thai person number or education G code for su
 
 test("uses slow peppered password hashing while retaining legacy verification", async () => {
   const password = await readFile(new URL("../lib/password.ts", import.meta.url), "utf8");
-  assert.match(password, /passwordHashIterations = 210_000/);
+  // New hashes must stay within Cloudflare's production PBKDF2 cap; 210_000 failed for real
+  // teachers (NotSupportedError at the "hash" step) while passing every local run.
+  assert.match(password, /passwordHashIterations = 100_000/);
   assert.match(password, /pbkdf2-sha256/);
   assert.match(password, /sessionSecret\(\).*password/);
   assert.match(password, /fields\[0\] === "hmac-sha256"/);

@@ -44,7 +44,12 @@ async function identityHmac(identity: string) {
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`student-identity-v1:${identity}`)));
 }
 
-const passwordHashIterations = 210_000;
+// Cloudflare's production runtime refuses PBKDF2 above its iteration cap (documented as 100,000)
+// and throws NotSupportedError; the local dev runtime does not, so higher values pass every
+// local test and then fail for real users. Keep this at or below the cap. The server-side
+// pepper in pbkdf2() below is what keeps a stolen database from being cracked offline.
+// verifyPassword still accepts stored hashes of 100,000 to 1,000,000 iterations.
+const passwordHashIterations = 100_000;
 
 async function pbkdf2(password: string, salt: Uint8Array, iterations: number, length: number) {
   const key = await crypto.subtle.importKey(
